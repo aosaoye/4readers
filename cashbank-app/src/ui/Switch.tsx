@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react';
+// src/ui/Switch.tsx
+import React, { useEffect, useRef } from 'react';
 import {
   Animated,
   Pressable,
   StyleSheet,
   type ViewStyle,
 } from 'react-native';
-import { colors } from './theme';
+import { useTheme } from './theme';
 
 export interface CustomSwitchProps {
   value: boolean;
@@ -22,20 +23,30 @@ export interface CustomSwitchProps {
 /**
  * Switch animado unificado según el estándar visual del proyecto (52x32px).
  * Color activo obligatorio: NARANJA (#E4531D / colors.accent).
- * Prohibido usar el switch nativo de React Native en todo el proyecto.
+ * Se adapta de forma 100% reactiva al modo Claro y Oscuro.
  */
 export function CustomSwitch({
   value,
   onValueChange,
   activeColor,
-  inactiveTrackColor = '#171A1F',
-  inactiveBorderColor = '#383F4A',
-  inactiveThumbColor = '#3C434F',
+  inactiveTrackColor,
+  inactiveBorderColor,
+  inactiveThumbColor,
   disabled = false,
   accessibilityLabel,
   style,
 }: CustomSwitchProps) {
-  const resolvedActiveColor = activeColor ?? (colors.accent || '#E4531D');
+  const { colors, isDark } = useTheme();
+
+  const resolvedActiveColor = activeColor ?? colors.accent;
+  const defaultInactiveTrack = isDark ? '#27272A' : '#E2E8F0';
+  const defaultInactiveBorder = isDark ? '#3F3F46' : '#CBD5E1';
+  const defaultInactiveThumb = isDark ? '#71717A' : '#FFFFFF';
+
+  const trackBg = inactiveTrackColor ?? defaultInactiveTrack;
+  const borderBg = inactiveBorderColor ?? defaultInactiveBorder;
+  const thumbBg = inactiveThumbColor ?? defaultInactiveThumb;
+
   const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
 
   useEffect(() => {
@@ -54,17 +65,17 @@ export function CustomSwitch({
 
   const backgroundColor = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [inactiveTrackColor, resolvedActiveColor],
+    outputRange: [trackBg, resolvedActiveColor],
   });
 
   const borderColor = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [inactiveBorderColor, resolvedActiveColor],
+    outputRange: [borderBg, resolvedActiveColor],
   });
 
   const thumbColor = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [inactiveThumbColor, '#FFFFFF'],
+    outputRange: [thumbBg, '#FFFFFF'],
   });
 
   return (

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
-import { colors, fonts, isDark, space } from './theme';
+import { colors, fonts, isDark, space, useTheme } from './theme';
 
 export type ToastTone = 'default' | 'success' | 'error' | 'warn' | 'info';
 
@@ -82,6 +82,7 @@ function ToastRow({
   item: ToastItem;
   onDismiss: (id: string) => void;
 }) {
+  const { colors, isDark } = useTheme();
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -105,11 +106,11 @@ function ToastRow({
 
   const tone = item.tone ?? 'default';
   const iconConfig: Record<ToastTone, { name: keyof typeof Feather.glyphMap; color: string }> = {
-    default: { name: 'info', color: colors.ink },
+    default: { name: 'info', color: colors.text },
     success: { name: 'check-circle', color: colors.success },
     error: { name: 'alert-circle', color: colors.danger },
-    warn: { name: 'alert-triangle', color: colors.warn },
-    info: { name: 'info', color: colors.accent },
+    warn: { name: 'alert-triangle', color: colors.warning },
+    info: { name: 'info', color: colors.primary },
   };
 
   const { name: iconName, color: iconColor } = iconConfig[tone];
@@ -126,8 +127,8 @@ function ToastRow({
         {
           opacity: anim,
           transform: [{ translateY }],
-          backgroundColor: isDark ? '#16181C' : '#FFFFFF',
-          borderColor: isDark ? '#2F3336' : colors.line,
+          backgroundColor: isDark ? '#1C1C21' : '#FFFFFF',
+          borderColor: colors.border,
         },
       ]}
       accessibilityRole="alert"
@@ -140,13 +141,13 @@ function ToastRow({
             fontFamily: fonts.medium,
             fontSize: 14,
             lineHeight: 18,
-            color: colors.ink,
+            color: colors.text,
           }}
         >
           {item.message}
         </Text>
         {item.description ? (
-          <Text variant="caption" style={{ color: colors.muted, marginTop: 2 }}>
+          <Text variant="caption" style={{ color: colors.textSecondary, marginTop: 2 }}>
             {item.description}
           </Text>
         ) : null}

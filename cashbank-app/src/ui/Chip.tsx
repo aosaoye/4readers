@@ -1,17 +1,43 @@
+// src/ui/Chip.tsx
+import React from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Text } from './Text';
-import { colors, gutter, radius } from './theme';
+import { gutter, radius, useTheme } from './theme';
 
-export function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void }) {
+export function Chip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active?: boolean;
+  onPress?: () => void;
+}) {
+  const { colors } = useTheme();
+
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: !!active }}
-      style={[s.chip, active && s.active]}
+      style={[
+        s.chip,
+        {
+          backgroundColor: active ? colors.text : colors.surface,
+          borderColor: active ? colors.text : colors.border,
+        },
+      ]}
     >
-      <Text variant="caption" style={{ fontSize: 13, lineHeight: 18, color: active ? colors.onInk : colors.muted }}>
+      <Text
+        variant="caption"
+        style={{
+          fontSize: 13,
+          lineHeight: 18,
+          fontWeight: active ? '600' : '400',
+          color: active ? colors.textInverse : colors.textSecondary,
+        }}
+      >
         {label}
       </Text>
     </Pressable>
@@ -19,7 +45,8 @@ export function Chip({ label, active, onPress }: { label: string; active?: boole
 }
 
 type Option<K extends string> = { key: K; label: string };
-/** Fila horizontal de chips: filtros, categorías, ordenación y pestañas internas comparten este componente. */
+
+/** Fila horizontal de chips: filtros, categorías, ordenación y pestañas internas. */
 export function ChipRow<K extends string>({
   options,
   value,
@@ -42,7 +69,12 @@ export function ChipRow<K extends string>({
       keyboardShouldPersistTaps="handled"
     >
       {options.map((o) => (
-        <Chip key={o.key} label={o.label} active={o.key === value} onPress={() => onChange(o.key)} />
+        <Chip
+          key={o.key}
+          label={o.label}
+          active={o.key === value}
+          onPress={() => onChange(o.key)}
+        />
       ))}
     </ScrollView>
   );
@@ -65,12 +97,7 @@ const s = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  active: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
   },
 });

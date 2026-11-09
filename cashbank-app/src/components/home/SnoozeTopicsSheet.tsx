@@ -1,5 +1,6 @@
+// src/components/home/SnoozeTopicsSheet.tsx
 import { Feather } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -8,7 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSnoozedTopics } from '@/lib/timelines';
-import { colors, CustomSwitch, fonts, isDark, space, Text, toast } from '@/ui';
+import { CustomSwitch, fonts, space, Text, toast, useTheme } from '@/ui';
 
 interface SnoozeTopicsSheetProps {
   visible: boolean;
@@ -30,10 +31,15 @@ const SNOOZE_CATEGORIES: { id: string; name: string; icon: keyof typeof Feather.
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-
 export function SnoozeTopicsSheet({ visible, onClose }: SnoozeTopicsSheetProps) {
   const { bottom } = useSafeAreaInsets();
-  const { snoozedMap, setSnoozedTopics, resetSnoozes, snoozedCount: committedCount } = useSnoozedTopics();
+  const { colors, isDark } = useTheme();
+  const {
+    snoozedMap,
+    setSnoozedTopics,
+    resetSnoozes,
+    snoozedCount: committedCount,
+  } = useSnoozedTopics();
 
   // Estado local en borrador: hasta que el usuario NO pulse "Silenciar X temas", NO se aplica ni cambia "Para ti"
   const [draftMap, setDraftMap] = useState<Record<string, number>>({});
@@ -80,61 +86,57 @@ export function SnoozeTopicsSheet({ visible, onClose }: SnoozeTopicsSheetProps) 
     onClose();
   };
 
+  const sheetBg = isDark ? '#09090B' : '#FFFFFF';
+  const sheetBorder = isDark ? '#27272A' : '#E2E8F0';
+  const handleBg = isDark ? '#3F3F46' : '#CBD5E1';
+
   return (
-    <Modal
-      visible={visible}
-      animationType="fade"
-      transparent
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={s.overlay}>
         {/* Tocar fuera cierra la hoja sin aplicar cambios no guardados */}
         <Pressable style={s.backdrop} onPress={onClose} />
 
-        {/* Hoja modal con fondo completamente negro (#000000) igual que el body */}
+        {/* Hoja modal con fondo claro u oscuro según el tema */}
         <View
           style={[
             s.sheet,
             {
-              backgroundColor: isDark ? '#000000' : '#FFFFFF',
+              backgroundColor: sheetBg,
+              borderTopColor: sheetBorder,
               paddingBottom: Math.max(bottom, space.lg) + space.sm,
             },
           ]}
         >
           {/* Indicador superior de arrastre */}
           <View style={s.handleWrap}>
-            <View style={s.handle} />
+            <View style={[s.handle, { backgroundColor: handleBg }]} />
           </View>
 
-          {/* Encabezado con mejor jerarquía visual */}
+          {/* Encabezado con excelente contraste en light y dark */}
           <View style={s.header}>
-            <Text variant="title" style={s.title}>
+            <Text variant="title" style={[s.title, { color: colors.text }]}>
               Aplazar temas
             </Text>
-            <Text variant="body" style={s.subtitle}>
+            <Text variant="body" style={[s.subtitle, { color: colors.textSecondary }]}>
               Selecciona temas para ocultar durante 1 día
             </Text>
           </View>
 
-          {/* Las 9 categorías con iconos de 23px y switches grandes de 52x32px */}
+          {/* Las 9 categorías con iconos y switches reactivos */}
           <View style={s.listContainer}>
             {SNOOZE_CATEGORIES.map((topic) => {
               const active = Boolean(draftMap[topic.id] && draftMap[topic.id] > Date.now());
               return (
                 <View key={topic.id} style={s.topicRow}>
                   <View style={s.topicLeft}>
-                    <Feather
-                      name={topic.icon}
-                      size={23}
-                      color={isDark ? '#FFFFFF' : colors.ink}
-                    />
+                    <Feather name={topic.icon} size={23} color={colors.text} />
                     <Text
                       variant="label"
                       style={{
                         fontSize: 16.5,
                         lineHeight: 22,
                         fontFamily: fonts.medium,
-                        color: isDark ? '#FFFFFF' : colors.ink,
+                        color: colors.text,
                       }}
                     >
                       {topic.name}
@@ -151,22 +153,28 @@ export function SnoozeTopicsSheet({ visible, onClose }: SnoozeTopicsSheetProps) 
             })}
           </View>
 
-          {/* Botón dinámico: si hay temas seleccionados en borrador muestra "Silenciar X temas" blanco con texto negro */}
+          {/* Botón dinámico con alto contraste garantizado */}
           <View style={s.footer}>
             {draftCount > 0 ? (
               <Pressable
                 onPress={handleApplySnooze}
                 style={({ pressed }) => [
                   s.actionButton,
-                  s.silenceButton,
-                  pressed && { opacity: 0.9 },
+                  {
+                    backgroundColor: isDark ? '#FFFFFF' : '#0F172A',
+                    opacity: pressed ? 0.9 : 1,
+                  },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel={`Silenciar ${draftCount} temas`}
               >
                 <Text
                   variant="heading"
-                  style={s.silenceButtonText}
+                  style={{
+                    color: isDark ? '#000000' : '#FFFFFF',
+                    fontSize: 16.5,
+                    fontFamily: fonts.bold,
+                  }}
                 >
                   Silenciar {draftCount} {draftCount === 1 ? 'tema' : 'temas'}
                 </Text>
@@ -175,19 +183,39 @@ export function SnoozeTopicsSheet({ visible, onClose }: SnoozeTopicsSheetProps) 
               <Pressable
                 onPress={handleReset}
                 disabled={committedCount === 0}
-                style={[
+                style={({ pressed }) => [
                   s.actionButton,
-                  committedCount === 0 ? s.resetButtonDisabled : s.resetButtonActive,
+                  {
+                    backgroundColor:
+                      committedCount === 0
+                        ? isDark
+                          ? '#18181B'
+                          : '#F1F5F9'
+                        : isDark
+                        ? '#27272A'
+                        : '#E2E8F0',
+                    borderWidth: 1,
+                    borderColor: isDark ? '#27272A' : '#E2E8F0',
+                    opacity: committedCount === 0 ? 0.5 : pressed ? 0.8 : 1,
+                  },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel="Restablecer temas"
               >
                 <Text
                   variant="heading"
-                  style={[
-                    s.resetButtonText,
-                    committedCount > 0 && { color: isDark ? '#FFFFFF' : '#000000' },
-                  ]}
+                  style={{
+                    color:
+                      committedCount === 0
+                        ? isDark
+                          ? '#71717A'
+                          : '#94A3B8'
+                        : isDark
+                        ? '#FFFFFF'
+                        : '#0F172A',
+                    fontSize: 16.5,
+                    fontFamily: fonts.bold,
+                  }}
                 >
                   Restablecer
                 </Text>
@@ -213,7 +241,6 @@ const s = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: 1,
-    borderColor: isDark ? '#1C1F24' : '#E5E7EB',
     paddingTop: space.sm,
   },
   handleWrap: {
@@ -224,7 +251,6 @@ const s = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#3E444E',
   },
   header: {
     paddingHorizontal: space.xl,
@@ -242,7 +268,6 @@ const s = StyleSheet.create({
   subtitle: {
     fontSize: 14.5,
     lineHeight: 20,
-    color: '#71767B',
     textAlign: 'center',
   },
   listContainer: {
@@ -262,28 +287,6 @@ const s = StyleSheet.create({
     gap: 16,
     flex: 1,
   },
-  // Switch grande de 52x32px idéntico a la imagen de referencia del usuario
-  switchTrack: {
-    width: 52,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  switchThumb: {
-    position: 'absolute',
-    top: 1,
-    left: 0,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 2.5,
-    elevation: 3,
-  },
   footer: {
     paddingHorizontal: space.xl,
     paddingTop: space.lg,
@@ -293,25 +296,5 @@ const s = StyleSheet.create({
     borderRadius: 100,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  silenceButton: {
-    backgroundColor: '#FFFFFF',
-  },
-  silenceButtonText: {
-    color: '#000000',
-    fontSize: 16.5,
-    fontFamily: fonts.bold,
-  },
-  resetButtonActive: {
-    backgroundColor: isDark ? '#2C3440' : '#E5E7EB',
-  },
-  resetButtonDisabled: {
-    backgroundColor: isDark ? '#20242B' : '#E5E7EB',
-    opacity: 0.4,
-  },
-  resetButtonText: {
-    color: '#8E9AA8',
-    fontSize: 16.5,
-    fontFamily: fonts.bold,
   },
 });

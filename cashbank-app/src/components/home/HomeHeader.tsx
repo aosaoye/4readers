@@ -82,8 +82,8 @@ export function HomeHeader({
   const { snoozedCount } = useSnoozedTopics();
   const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null);
 
-  const activeColor = isDark ? '#FFFFFF' : '#000000';
-  const inactiveColor = isDark ? '#71767B' : colors.muted;
+  const activeColor = colors.text;
+  const inactiveColor = colors.textMuted;
 
   // Sanitiza las cronologías fijadas para asegurar que nunca se filtren datos nulos ni las fijas de sistema
   const validPinnedTimelines = useMemo(
@@ -115,8 +115,8 @@ export function HomeHeader({
         s.container,
         {
           paddingTop: Math.max(top, space.sm),
-          backgroundColor: colors.bg,
-          borderBottomColor: isDark ? '#1C1F24' : colors.line,
+          backgroundColor: colors.background,
+          borderBottomColor: colors.border,
         },
       ]}
     >

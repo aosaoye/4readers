@@ -124,7 +124,7 @@ export default function Explore() {
   }, [allPosts, searchQuery]);
 
   return (
-    <Screen edges={['bottom']} style={{ backgroundColor: isDark ? '#000000' : themeColors.bg }}>
+    <Screen edges={['bottom']}>
       {/* Cabecera dinámica: al comenzar a escribir muestra el diseño exacto de la Imagen 1 */}
       {isSearching ? (
         <View style={[s.searchActiveBar, { paddingTop: Math.max(top, space.sm) + 4 }]}>
@@ -134,11 +134,15 @@ export default function Explore() {
               setSearchQuery('');
             }}
             hitSlop={10}
-            style={({ pressed }) => [s.circleBackBtn, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              s.circleBackBtn,
+              { backgroundColor: themeColors.surfaceSubtle },
+              pressed && { opacity: 0.7 },
+            ]}
             accessibilityRole="button"
             accessibilityLabel="Volver a explorar"
           >
-            <Feather name="arrow-left" size={20} color={isDark ? '#FFFFFF' : themeColors.ink} />
+            <Feather name="arrow-left" size={20} color={themeColors.text} />
           </Pressable>
 
           <View style={s.searchInputRow}>
@@ -152,7 +156,7 @@ export default function Explore() {
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
-              style={[s.searchInput, { color: isDark ? '#FFFFFF' : themeColors.ink }]}
+              style={[s.searchInput, { color: themeColors.text }]}
             />
             {searchQuery.length > 0 && (
               <Pressable
@@ -180,10 +184,18 @@ export default function Explore() {
             onPress={() => setIsSearching(true)}
             accessibilityRole="search"
             accessibilityLabel="Buscar"
-            style={({ pressed }) => [s.searchPill, pressed && { opacity: 0.8 }]}
+            style={({ pressed }) => [
+              s.searchPill,
+              { backgroundColor: themeColors.surfaceSubtle },
+              pressed && { opacity: 0.8 },
+            ]}
           >
-            <Feather name="search" size={16} color="#71767B" />
-            <Text variant="body" style={s.searchPillText} numberOfLines={1}>
+            <Feather name="search" size={16} color={themeColors.textMuted} />
+            <Text
+              variant="body"
+              style={[s.searchPillText, { color: themeColors.textMuted }]}
+              numberOfLines={1}
+            >
               Buscar
             </Text>
           </Pressable>
@@ -232,215 +244,215 @@ export default function Explore() {
       ) : (
         <>
           {/* Barra horizontal de pestañas con subrayado (Explorar | Tendencias | Categorías de la API) */}
-      <View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.tabsScroll}
-        >
-          {tabs.map((t) => {
-            const active = activeTab === t.key;
-            return (
-              <Pressable
-                key={t.key}
-                onPress={() => setActiveTab(t.key)}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-                style={s.tabItem}
-              >
-                <View style={s.tabLabelRow}>
-                  {active && <Feather name={t.icon} size={15} color={colors.ink} />}
-                  <Text
-                    variant="label"
-                    style={[
-                      s.tabText,
-                      { color: active ? colors.ink : colors.muted },
-                      active && { fontFamily: fonts.bold },
-                    ]}
-                  >
-                    {t.label}
-                  </Text>
-                </View>
-                <View style={[s.tabIndicator, active && s.tabIndicatorActive]} />
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        <Divider />
-      </View>
-
-      {/* Contenido según la pestaña activa */}
-      {activeTab === 'explore' ? (
-        <FlatList
-          data={exploreTrendItems}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={item.onPress}
-              style={({ pressed }) => [s.trendRow, pressed && { opacity: 0.7 }]}
+          <View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.tabsScroll}
             >
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text variant="caption" style={s.trendKicker}>
-                  {item.kicker}
-                </Text>
-                <Text variant="heading" numberOfLines={2} style={s.trendTitle}>
-                  {item.title}
-                </Text>
-                <Text variant="caption" numberOfLines={1}>
-                  {item.subtitle}
-                </Text>
-              </View>
-              <Feather name="more-vertical" size={16} color={colors.muted} />
-            </Pressable>
-          )}
-          ListEmptyComponent={
-            fallbackFeed.isPending ? (
-              <SkeletonRows count={5} />
-            ) : fallbackFeed.error ? (
-              <ErrorState error={fallbackFeed.error} onRetry={fallbackFeed.refetch} />
-            ) : (
-              <View style={s.emptyEditorial}>
-                <Text variant="display" style={s.emptyTitle}>
-                  No hay nada que ver aquí... por ahora.
-                </Text>
-              </View>
-            )
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={false}
-              tintColor={colors.ink}
-              onRefresh={() => {
-                categories.refetch();
-                fallbackFeed.refetch();
-              }}
-            />
-          }
-          contentContainerStyle={{ paddingBottom: 110 }}
-        />
-      ) : activeTab === 'trends' ? (
-        <FlatList
-          data={trendsList}
-          keyExtractor={(p) => p.id}
-          ListHeaderComponent={
-            <View style={s.bannerWrap}>
-              <View style={s.bannerCard}>
-                <Cover
-                  seed={trendsList[0]?.categoryId ?? 'global-trends'}
-                  imageUrl={trendsList[0]?.coverImageUrl}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View style={s.bannerOverlay}>
-                  <Text variant="title" style={s.bannerTitle}>
-                    Tendencias globales
-                  </Text>
-                  <Text variant="body" style={s.bannerSub}>
-                    Las publicaciones más populares y verificadas
-                  </Text>
+              {tabs.map((t) => {
+                const active = activeTab === t.key;
+                return (
                   <Pressable
-                    onPress={() =>
-                      trendsList[0]
-                        ? router.navigate(`/post/${trendsList[0].id}`)
-                        : router.push('/search')
-                    }
-                    style={({ pressed }) => [s.bannerBtn, pressed && { opacity: 0.8 }]}
+                    key={t.key}
+                    onPress={() => setActiveTab(t.key)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                    style={s.tabItem}
                   >
-                    <Text variant="label" style={{ color: '#FFFFFF', fontSize: 13 }}>
-                      Explorar
-                    </Text>
+                    <View style={s.tabLabelRow}>
+                      {active && <Feather name={t.icon} size={15} color={colors.ink} />}
+                      <Text
+                        variant="label"
+                        style={[
+                          s.tabText,
+                          { color: active ? colors.ink : colors.muted },
+                          active && { fontFamily: fonts.bold },
+                        ]}
+                      >
+                        {t.label}
+                      </Text>
+                    </View>
+                    <View style={[s.tabIndicator, active && s.tabIndicatorActive]} />
                   </Pressable>
-                </View>
-              </View>
-            </View>
-          }
-          renderItem={({ item, index }) => {
-            const meta = parseRepost(item);
-            return (
-              <Pressable
-                onPress={() => router.navigate(`/post/${item.id}`)}
-                style={({ pressed }) => [s.trendRow, pressed && { opacity: 0.7 }]}
-              >
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text variant="caption" style={s.trendKicker}>
-                    {index + 1} · {item.categoryName ?? 'Actualidad'} · Tendencia
-                  </Text>
-                  <Text variant="heading" numberOfLines={2} style={s.trendTitle}>
-                    {item.title}
-                  </Text>
-                  <Text variant="caption">
-                    @{meta.originalAuthor}
-                    {item.isVerified ? ' · Verificado' : ''}
-                  </Text>
-                </View>
-                <Feather name="more-vertical" size={16} color={colors.muted} />
-              </Pressable>
-            );
-          }}
-          ListEmptyComponent={
-            feed.isPending ? (
-              <SkeletonRows count={5} />
-            ) : (
-              <View style={s.emptyEditorial}>
-                <Text variant="display" style={s.emptyTitle}>
-                  No hay nada que ver aquí... por ahora.
-                </Text>
-              </View>
-            )
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={false}
-              tintColor={colors.ink}
-              onRefresh={() => {
-                feed.refetch();
-                fallbackFeed.refetch();
-              }}
+                );
+              })}
+            </ScrollView>
+            <Divider />
+          </View>
+
+          {/* Contenido según la pestaña activa */}
+          {activeTab === 'explore' ? (
+            <FlatList
+              data={exploreTrendItems}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={item.onPress}
+                  style={({ pressed }) => [s.trendRow, pressed && { opacity: 0.7 }]}
+                >
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text variant="caption" style={s.trendKicker}>
+                      {item.kicker}
+                    </Text>
+                    <Text variant="heading" numberOfLines={2} style={s.trendTitle}>
+                      {item.title}
+                    </Text>
+                    <Text variant="caption" numberOfLines={1}>
+                      {item.subtitle}
+                    </Text>
+                  </View>
+                  <Feather name="more-vertical" size={16} color={colors.muted} />
+                </Pressable>
+              )}
+              ListEmptyComponent={
+                fallbackFeed.isPending ? (
+                  <SkeletonRows count={5} />
+                ) : fallbackFeed.error ? (
+                  <ErrorState error={fallbackFeed.error} onRetry={fallbackFeed.refetch} />
+                ) : (
+                  <View style={s.emptyEditorial}>
+                    <Text variant="display" style={s.emptyTitle}>
+                      No hay nada que ver aquí... por ahora.
+                    </Text>
+                  </View>
+                )
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={false}
+                  tintColor={colors.ink}
+                  onRefresh={() => {
+                    categories.refetch();
+                    fallbackFeed.refetch();
+                  }}
+                />
+              }
+              contentContainerStyle={{ paddingBottom: 110 }}
             />
-          }
-          contentContainerStyle={{ paddingBottom: 110 }}
-        />
-      ) : (
-        /* Pestañas dinámicas por Categoría (Imagen 3) */
-        <FlatList
-          data={feedPosts}
-          keyExtractor={(p: Post) => p.id}
-          ItemSeparatorComponent={Divider}
-          renderItem={({ item }) => (
-            <PostRow post={item} onPress={() => router.navigate(`/post/${item.id}`)} />
+          ) : activeTab === 'trends' ? (
+            <FlatList
+              data={trendsList}
+              keyExtractor={(p) => p.id}
+              ListHeaderComponent={
+                <View style={s.bannerWrap}>
+                  <View style={s.bannerCard}>
+                    <Cover
+                      seed={trendsList[0]?.categoryId ?? 'global-trends'}
+                      imageUrl={trendsList[0]?.coverImageUrl}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <View style={s.bannerOverlay}>
+                      <Text variant="title" style={s.bannerTitle}>
+                        Tendencias globales
+                      </Text>
+                      <Text variant="body" style={s.bannerSub}>
+                        Las publicaciones más populares y verificadas
+                      </Text>
+                      <Pressable
+                        onPress={() =>
+                          trendsList[0]
+                            ? router.navigate(`/post/${trendsList[0].id}`)
+                            : router.push('/search')
+                        }
+                        style={({ pressed }) => [s.bannerBtn, pressed && { opacity: 0.8 }]}
+                      >
+                        <Text variant="label" style={{ color: '#FFFFFF', fontSize: 13 }}>
+                          Explorar
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              }
+              renderItem={({ item, index }) => {
+                const meta = parseRepost(item);
+                return (
+                  <Pressable
+                    onPress={() => router.navigate(`/post/${item.id}`)}
+                    style={({ pressed }) => [s.trendRow, pressed && { opacity: 0.7 }]}
+                  >
+                    <View style={{ flex: 1, gap: 3 }}>
+                      <Text variant="caption" style={s.trendKicker}>
+                        {index + 1} · {item.categoryName ?? 'Actualidad'} · Tendencia
+                      </Text>
+                      <Text variant="heading" numberOfLines={2} style={s.trendTitle}>
+                        {item.title}
+                      </Text>
+                      <Text variant="caption">
+                        @{meta.originalAuthor}
+                        {item.isVerified ? ' · Verificado' : ''}
+                      </Text>
+                    </View>
+                    <Feather name="more-vertical" size={16} color={colors.muted} />
+                  </Pressable>
+                );
+              }}
+              ListEmptyComponent={
+                feed.isPending ? (
+                  <SkeletonRows count={5} />
+                ) : (
+                  <View style={s.emptyEditorial}>
+                    <Text variant="display" style={s.emptyTitle}>
+                      No hay nada que ver aquí... por ahora.
+                    </Text>
+                  </View>
+                )
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={false}
+                  tintColor={colors.ink}
+                  onRefresh={() => {
+                    feed.refetch();
+                    fallbackFeed.refetch();
+                  }}
+                />
+              }
+              contentContainerStyle={{ paddingBottom: 110 }}
+            />
+          ) : (
+            /* Pestañas dinámicas por Categoría (Imagen 3) */
+            <FlatList
+              data={feedPosts}
+              keyExtractor={(p: Post) => p.id}
+              ItemSeparatorComponent={Divider}
+              renderItem={({ item }) => (
+                <PostRow post={item} onPress={() => router.navigate(`/post/${item.id}`)} />
+              )}
+              ListEmptyComponent={
+                feed.isPending ? (
+                  <SkeletonRows count={4} />
+                ) : feed.error ? (
+                  <ErrorState error={feed.error} onRetry={feed.refetch} />
+                ) : (
+                  <View style={s.emptyEditorial}>
+                    <Text variant="display" style={s.emptyTitle}>
+                      No hay nada que ver aquí... por ahora.
+                    </Text>
+                  </View>
+                )
+              }
+              ListFooterComponent={
+                feed.isFetchingNextPage ? (
+                  <ActivityIndicator style={{ margin: space.xl }} color={colors.ink} />
+                ) : undefined
+              }
+              onEndReached={() => feed.hasNextPage && !feed.isFetchingNextPage && feed.fetchNextPage()}
+              onEndReachedThreshold={0.6}
+              refreshControl={
+                <RefreshControl
+                  refreshing={false}
+                  tintColor={colors.ink}
+                  onRefresh={() => {
+                    feed.refetch();
+                  }}
+                />
+              }
+              contentContainerStyle={{ paddingBottom: 110 }}
+            />
           )}
-          ListEmptyComponent={
-            feed.isPending ? (
-              <SkeletonRows count={4} />
-            ) : feed.error ? (
-              <ErrorState error={feed.error} onRetry={feed.refetch} />
-            ) : (
-              <View style={s.emptyEditorial}>
-                <Text variant="display" style={s.emptyTitle}>
-                  No hay nada que ver aquí... por ahora.
-                </Text>
-              </View>
-            )
-          }
-          ListFooterComponent={
-            feed.isFetchingNextPage ? (
-              <ActivityIndicator style={{ margin: space.xl }} color={colors.ink} />
-            ) : undefined
-          }
-          onEndReached={() => feed.hasNextPage && !feed.isFetchingNextPage && feed.fetchNextPage()}
-          onEndReachedThreshold={0.6}
-          refreshControl={
-            <RefreshControl
-              refreshing={false}
-              tintColor={colors.ink}
-              onRefresh={() => {
-                feed.refetch();
-              }}
-            />
-          }
-          contentContainerStyle={{ paddingBottom: 110 }}
-        />
-      )}
-      </>
+        </>
       )}
 
       {/* Botón flotante (+) en la esquina inferior derecha */}
