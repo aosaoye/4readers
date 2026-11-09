@@ -6,7 +6,6 @@ import {
   flat,
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
-  useMe,
   useNotifications,
 } from '@/api/hooks';
 import type { NotificationItem } from '@/api/types';
@@ -52,7 +51,6 @@ function getNotifVisual(type: string): {
 
 export default function NotificationsScreen() {
   const [tab, setTab] = useState<NotifTab>('all');
-  const me = useMe().data;
   const q = useNotifications();
   const markOne = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
@@ -103,7 +101,7 @@ export default function NotificationsScreen() {
 
   return (
     <Screen>
-      {/* Cabecera estilo referencia: atrás + Avatar a la izquierda, título centrado, acción a la derecha */}
+      {/* Cabecera estilo referencia: atrás a la izquierda, título centrado, acción a la derecha */}
       <View style={s.headerBar}>
         <View style={s.headerSide}>
           <IconButton
@@ -111,13 +109,6 @@ export default function NotificationsScreen() {
             label="Volver"
             onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))}
           />
-          <Pressable
-            onPress={() => router.navigate('/profile')}
-            accessibilityRole="button"
-            accessibilityLabel="Ir a tu perfil"
-          >
-            <Avatar name={me?.username ?? 'Tú'} avatarUrl={me?.avatarUrl} size={32} />
-          </Pressable>
         </View>
 
         <Text variant="heading" style={s.headerTitle}>

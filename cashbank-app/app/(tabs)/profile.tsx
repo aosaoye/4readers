@@ -428,21 +428,6 @@ export default function ProfileScreen() {
               },
             ]}
           >
-            {/* Botón Atrás */}
-            <Pressable
-              onPress={() => router.navigate('/')}
-              hitSlop={8}
-              style={({ pressed }) => [
-                s.circleBtn,
-                isScrolled ? (isDark ? s.circleBtnScrolled : { backgroundColor: 'rgba(0,0,0,0.06)' }) : s.circleBtnTransparent,
-                pressed && { opacity: 0.7 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Atrás"
-            >
-              <Feather name="arrow-left" size={20} color={isScrolled ? textPrimary : '#FFFFFF'} />
-            </Pressable>
-
             {/* Título en scroll */}
             <View style={s.stickyTitleWrap}>
               {isScrolled && (
@@ -1291,7 +1276,6 @@ const s = StyleSheet.create({
   },
   stickyTitleWrap: {
     flex: 1,
-    paddingLeft: 14,
     justifyContent: 'center',
   },
   stickyTitle: {
