@@ -1,0 +1,194 @@
+{
+	"name": "cashbank-app",
+	"version": "1.0.0",
+	"main": "expo-router/entry",
+	"scripts": {
+		"start": "expo start",
+		"android": "expo start --android",
+		"ios": "expo start --ios",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@expo-google-fonts/inter": "^0.4.0",
+		"@expo/vector-icons": "^15.0.2",
+		"@react-native-async-storage/async-storage": "2.2.0",
+		"@react-native-community/netinfo": "12.0.1",
+		"@tanstack/query-async-storage-persister": "^5.90.0",
+		"@tanstack/react-query": "^5.90.0",
+		"@tanstack/react-query-persist-client": "^5.90.0",
+		"expo": "~58.0.23",
+		"expo-constants": "~58.0.15",
+		"expo-font": "~58.0.11",
+		"expo-image-picker": "^58.0.10",
+		"expo-linear-gradient": "~58.0.3",
+		"expo-linking": "~58.0.16",
+		"expo-router": "~58.0.30",
+		"expo-secure-store": "~58.0.2",
+		"expo-splash-screen": "~58.0.13",
+		"expo-status-bar": "~58.0.4",
+		"expo-web-browser": "~58.0.7",
+		"react": "19.3.0",
+		"react-native": "0.88.1",
+		"react-native-safe-area-context": "~5.11.1",
+		"react-native-screens": "~4.30.1"
+	},
+	"devDependencies": {
+		"@types/react": "~19.2.0",
+		"typescript": "~5.9.2"
+	},
+	"private": true,
+	"Resources": {
+		"Bucket": {
+			"Type": "AWS::S3::Bucket",
+			"Properties": {
+				"BucketName": {
+					"Fn::Sub": "${AWS::StackName}-bucket-${AWS::AccountId}"
+				},
+				"BucketEncryption": {
+					"ServerSideEncryptionConfiguration": [
+						{
+							"ServerSideEncryptionByDefault": {
+								"SSEAlgorithm": "aws:kms",
+								"KMSMasterKeyID": "alias/aws/s3"
+							}
+						}
+					]
+				},
+				"PublicAccessBlockConfiguration": {
+					"IgnorePublicAcls": true,
+					"RestrictPublicBuckets": true
+				}
+			}
+		},
+		"BucketBucketPolicy": {
+			"Type": "AWS::S3::BucketPolicy",
+			"Properties": {
+				"Bucket": {
+					"Ref": "Bucket"
+				},
+				"PolicyDocument": {
+					"Id": "RequireEncryptionInTransit",
+					"Version": "2012-10-17",
+					"Statement": [
+						{
+							"Principal": "*",
+							"Action": "*",
+							"Effect": "Deny",
+							"Resource": [
+								{
+									"Fn::GetAtt": [
+										"Bucket",
+										"Arn"
+									]
+								},
+								{
+									"Fn::Sub": "${Bucket.Arn}/*"
+								}
+							],
+							"Condition": {
+								"Bool": {
+									"aws:SecureTransport": "false"
+								}
+							}
+						}
+					]
+				}
+			}
+		},
+		"Function": {
+			"Type": "AWS::Serverless::Function",
+			"Properties": {
+				"Description": {
+					"Fn::Sub": [
+						"Stack ${AWS::StackName} Function ${ResourceName}",
+						{
+							"ResourceName": "Function"
+						}
+					]
+				},
+				"CodeUri": "src/Function",
+				"Handler": "index.handler",
+				"Runtime": "nodejs22.x",
+				"MemorySize": 3008,
+				"Timeout": 30,
+				"Tracing": "Active",
+				"Environment": {
+					"Variables": {
+						"BUCKET_BUCKET_NAME": {
+							"Ref": "Bucket"
+						},
+						"BUCKET_BUCKET_ARN": {
+							"Fn::GetAtt": [
+								"Bucket",
+								"Arn"
+							]
+						}
+					}
+				},
+				"Policies": [
+					{
+						"Statement": [
+							{
+								"Effect": "Allow",
+								"Action": [
+									"s3:GetObject",
+									"s3:GetObjectAcl",
+									"s3:GetObjectLegalHold",
+									"s3:GetObjectRetention",
+									"s3:GetObjectTorrent",
+									"s3:GetObjectVersion",
+									"s3:GetObjectVersionAcl",
+									"s3:GetObjectVersionForReplication",
+									"s3:GetObjectVersionTorrent",
+									"s3:ListBucket",
+									"s3:ListBucketMultipartUploads",
+									"s3:ListBucketVersions",
+									"s3:ListMultipartUploadParts",
+									"s3:AbortMultipartUpload",
+									"s3:DeleteObject",
+									"s3:DeleteObjectVersion",
+									"s3:PutObject",
+									"s3:PutObjectLegalHold",
+									"s3:PutObjectRetention",
+									"s3:RestoreObject"
+								],
+								"Resource": [
+									{
+										"Fn::Sub": "arn:${AWS::Partition}:s3:::${Bucket}"
+									},
+									{
+										"Fn::Sub": "arn:${AWS::Partition}:s3:::${Bucket}/*"
+									}
+								]
+							}
+						]
+					}
+				],
+				"Events": {
+					"Bucket": {
+						"Type": "S3",
+						"Properties": {
+							"Bucket": {
+								"Ref": "Bucket"
+							},
+							"Events": [
+								"s3:ObjectCreated:*",
+								"s3:ObjectRemoved:*"
+							]
+						}
+					}
+				}
+			}
+		},
+		"FunctionLogGroup": {
+			"Type": "AWS::Logs::LogGroup",
+			"DeletionPolicy": "Retain",
+			"Properties": {
+				"LogGroupName": {
+					"Fn::Sub": "/aws/lambda/${Function}"
+				}
+			}
+		}
+	},
+	"Transform": "AWS::Serverless-2016-10-31"
+}

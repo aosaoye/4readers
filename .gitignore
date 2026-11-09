@@ -1,0 +1,8 @@
+node_modules/
+.expo/
+dist/
+test-dist/
+.env
+*.log
+**/node_modules/
+**/.expo/
