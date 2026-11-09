@@ -1,396 +1,987 @@
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { View } from 'react-native';
-import { ApiError } from '@/api/client';
+import { useMemo, useRef, useState } from 'react';
 import {
-  flat,
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
   useCategories,
   useCreatePost,
-  useMyOrganizations,
+  useMe,
   usePost,
   useUpdatePost,
-  useWallet,
 } from '@/api/hooks';
-import { Errors, hasErrors, rules } from '@/lib/validation';
+import { AudienceModal, type AudienceType } from '@/components/compose/AudienceModal';
+import { GifModal } from '@/components/compose/GifModal';
+import { LocationModal } from '@/components/compose/LocationModal';
+import { PollData, PollEditor } from '@/components/compose/PollEditor';
+import { SpaceConfig, SpacesModal } from '@/components/compose/SpacesModal';
 import {
-  Badge,
-  Banner,
-  Button,
-  Card,
-  ChipRow,
-  Field,
-  FormScroll,
-  NavHeader,
+  Avatar,
+  fonts,
+  gutter,
+  radius,
   Screen,
-  Section,
   space,
-  Stepper,
   Text,
+  toast,
+  useTheme,
 } from '@/ui';
 
-const emptySource = () => ({ title: '', url: '', publisher: '' });
-type SourceErrors = Errors<'title' | 'url' | 'publisher'>[];
+interface ThreadPost {
+  id: string;
+  text: string;
+  images: string[];
+  gifUrl?: string;
+  location?: string;
+  poll?: PollData | null;
+  spaceConfig?: SpaceConfig | null;
+}
 
-const STEPS = [
-  { title: 'Titular' },
-  { title: 'Contenido' },
-  { title: 'Fuentes' },
-];
-
-/** Formulario por pasos (Stepper) para publicar y editar (`/post/new?edit=<id>`) sin scroll excesivo. */
-export default function PostEditor() {
+export default function NewPostScreen() {
   const { edit } = useLocalSearchParams<{ edit?: string }>();
   const editing = !!edit;
-  const categories = useCategories();
-  const orgsQuery = useMyOrganizations();
-  const wallet = useWallet();
   const existing = usePost(edit ?? '', editing);
-  const create = useCreatePost();
-  const update = useUpdatePost(edit ?? '');
-  const mutation = editing ? update : create;
 
-  const [step, setStep] = useState(0);
-  const [f, setF] = useState({
-    categoryId: '',
-    organizationId: '',
-    title: '',
-    summary: '',
-    coverImageUrl: '',
-    content: '',
-    unlockPriceTokens: '',
-  });
-  const [sources, setSources] = useState([emptySource()]);
-  const [errors, setErrors] = useState<Errors<keyof typeof f>>({});
-  const [srcErrors, setSrcErrors] = useState<SourceErrors>([]);
-  const [hydrated, setHydrated] = useState(false);
+  const { isDark, colors } = useTheme();
+  const { top, bottom } = useSafeAreaInsets();
+  const me = useMe().data;
+  const categoriesQuery = useCategories();
+  const categories = categoriesQuery.data ?? [];
 
-  const myOrgs = flat(orgsQuery.data);
+  const createPost = useCreatePost();
+  const updatePost = useUpdatePost(edit ?? '');
 
-  useEffect(() => {
-    const p = existing.data;
-    if (editing && p && !hydrated) {
-      setF({
-        categoryId: p.categoryId,
-        organizationId: p.organizationId ?? '',
-        title: p.title,
-        summary: p.summary,
-        coverImageUrl: p.coverImageUrl ?? '',
-        content: p.content,
-        unlockPriceTokens: p.unlockPriceTokens ? String(p.unlockPriceTokens) : '',
+  // Estado del hilo de posts (conectar varios posts)
+  const [posts, setPosts] = useState<ThreadPost[]>([
+    {
+      id: '1',
+      text: existing.data?.content || '',
+      images: existing.data?.coverImageUrl ? [existing.data.coverImageUrl] : [],
+      poll: null,
+      spaceConfig: null,
+    },
+  ]);
+  const [focusedIndex, setFocusedIndex] = useState(0);
+
+  // Audiencia de respuestas
+  const [audience, setAudience] = useState<AudienceType>('everyone');
+  const [showAudienceModal, setShowAudienceModal] = useState(false);
+
+  // Modales de adjuntos
+  const [showSpacesModal, setShowSpacesModal] = useState(false);
+  const [showGifModal, setShowGifModal] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+
+  // Categoría seleccionada
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+
+  const scrollRef = useRef<any>(null);
+
+  // Actualizar post activo
+  const updateActivePost = (updater: (prev: ThreadPost) => ThreadPost) => {
+    setPosts((prev) => {
+      const next = [...prev];
+      next[focusedIndex] = updater(next[focusedIndex]);
+      return next;
+    });
+  };
+
+  // Conectar varios posts (Thread / Hilo)
+  const addThreadPost = () => {
+    const newId = String(Date.now());
+    setPosts((prev) => [
+      ...prev,
+      { id: newId, text: '', images: [], poll: null, spaceConfig: null },
+    ]);
+    const nextIdx = posts.length;
+    setFocusedIndex(nextIdx);
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 150);
+  };
+
+  const removeThreadPost = (idx: number) => {
+    if (posts.length <= 1) return;
+    setPosts((prev) => prev.filter((_, i) => i !== idx));
+    setFocusedIndex((prev) => Math.max(0, prev - 1));
+  };
+
+  // 1. Añadir imágenes desde Galería
+  const handlePickImages = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Se requiere permiso para acceder a las fotos');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        quality: 0.8,
       });
-      setSources(
-        p.sources.length
-          ? p.sources.map((s) => ({ title: s.title, url: s.url, publisher: s.publisher }))
-          : [emptySource()],
-      );
-      setHydrated(true);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const uris = result.assets.map((a) => a.uri).filter(Boolean);
+        updateActivePost((p) => ({
+          ...p,
+          images: [...p.images, ...uris].slice(0, 4),
+        }));
+        toast.success(uris.length === 1 ? 'Imagen añadida' : `${uris.length} imágenes añadidas`);
+      }
+    } catch {
+      toast.error('Error al seleccionar imagen');
     }
-  }, [editing, existing.data, hydrated]);
-
-  const set = (k: keyof typeof f) => (v: string) => {
-    setF((s) => ({ ...s, [k]: v }));
-    if (errors[k]) setErrors((prev) => ({ ...prev, [k]: undefined }));
-  };
-  const setSource = (i: number, k: keyof ReturnType<typeof emptySource>) => (v: string) =>
-    setSources((s) => s.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
-  const apiError = mutation.error instanceof ApiError ? mutation.error : null;
-
-  const validateStep0 = () => {
-    const e = {
-      categoryId: rules.category(f.categoryId),
-      title: rules.title(f.title),
-      summary: rules.summary(f.summary),
-      coverImageUrl: f.coverImageUrl.trim() ? rules.sourceUrl(f.coverImageUrl) : undefined,
-    };
-    setErrors((prev) => ({ ...prev, ...e }));
-    return !hasErrors(e);
   };
 
-  const validateStep1 = () => {
-    const priceRaw = f.unlockPriceTokens.trim();
-    const priceNum = priceRaw ? Number(priceRaw) : 0;
-    const priceErr =
-      priceRaw && (!Number.isInteger(priceNum) || priceNum < 0 || priceNum > 5000)
-        ? 'El precio debe ser un entero entre 0 y 5000 fichas.'
-        : undefined;
-    const e = { content: rules.content(f.content), unlockPriceTokens: priceErr };
-    setErrors((prev) => ({ ...prev, ...e }));
-    return !hasErrors(e);
+  // 2. Capturar con la Cámara
+  const handleTakePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Se requiere permiso de cámara');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
+        const uri = result.assets[0].uri;
+        updateActivePost((p) => ({
+          ...p,
+          images: [...p.images, uri].slice(0, 4),
+        }));
+        toast.success('Foto capturada');
+      }
+    } catch {
+      toast.error('Error al capturar foto');
+    }
   };
 
-  const goToStep = (target: number) => {
-    if (target === step) return;
-    if (target < step) {
-      setStep(target);
+  // 3. Encuesta / Lista (Imagen 2)
+  const handleTogglePoll = () => {
+    updateActivePost((p) => ({
+      ...p,
+      poll: p.poll
+        ? null
+        : {
+            options: ['', ''],
+            duration: '1 día',
+          },
+    }));
+  };
+
+  // Publicar post(s)
+  const isSubmitting = createPost.isPending || updatePost.isPending;
+
+  const totalCharsInActive = posts[focusedIndex]?.text.length ?? 0;
+  const maxChars = 280;
+  const hasContent = posts.some(
+    (p) =>
+      p.text.trim().length > 0 ||
+      p.images.length > 0 ||
+      p.gifUrl ||
+      p.poll ||
+      p.spaceConfig
+  );
+
+  const handlePublish = async () => {
+    if (!hasContent) {
+      toast.error('Escribe algo para publicar');
       return;
     }
-    if (step === 0 && !validateStep0()) return;
-    if (target === 2 && !validateStep1()) {
-      setStep(1);
-      return;
-    }
-    setStep(target);
-  };
 
-  const nextStep = () => {
-    if (step === 0 && validateStep0()) setStep(1);
-    else if (step === 1 && validateStep1()) setStep(2);
-  };
+    // Default category fallback
+    const catId =
+      selectedCategoryId ||
+      categories[0]?.id ||
+      '00000000-0000-0000-0000-000000000000';
 
-  const submit = () => {
-    if (!validateStep0()) {
-      setStep(0);
-      return;
-    }
-    if (!validateStep1()) {
-      setStep(1);
-      return;
-    }
-    const filled = sources.filter((s) => s.title || s.url || s.publisher);
-    const se: SourceErrors = sources.map((s) =>
-      s.title || s.url || s.publisher
-        ? {
-            title: rules.sourceTitle(s.title),
-            url: rules.sourceUrl(s.url),
-            publisher: rules.publisher(s.publisher),
+    try {
+      if (editing && edit) {
+        const primary = posts[0];
+        await updatePost.mutateAsync({
+          title: primary.text.slice(0, 60) || 'Publicación',
+          summary: primary.text.slice(0, 150) || primary.text,
+          content: primary.text,
+          coverImageUrl: primary.images[0] || primary.gifUrl,
+        });
+        toast.success('Publicación actualizada');
+        router.back();
+        return;
+      }
+
+      // Si es un hilo de varios posts conectados
+      for (let i = 0; i < posts.length; i++) {
+        const p = posts[i];
+        let fullContent = p.text;
+
+        // Anexar encuesta si existe
+        if (p.poll) {
+          const validOpts = p.poll.options.filter((o) => o.trim().length > 0);
+          if (validOpts.length > 0) {
+            fullContent += `\n\n📊 Encuesta (${p.poll.duration}):\n` + validOpts.map((o) => `• ${o}`).join('\n');
           }
-        : {},
-    );
-    setSrcErrors(se);
-    if (se.some(hasErrors)) return;
+        }
 
-    const unlockTokens = f.unlockPriceTokens.trim() ? Number(f.unlockPriceTokens.trim()) : undefined;
-    const body = {
-      categoryId: f.categoryId,
-      organizationId: f.organizationId || undefined,
-      title: f.title.trim(),
-      summary: f.summary.trim(),
-      coverImageUrl: f.coverImageUrl.trim() || undefined,
-      content: f.content.trim(),
-      unlockPriceTokens: unlockTokens,
-      sources: filled.map((s) => ({ title: s.title.trim(), url: s.url.trim(), publisher: s.publisher.trim() })),
-      acknowledgeBadgeLoss: editing && existing.data?.isVerified ? true : undefined,
-    };
-    if (editing) update.mutate(body, { onSuccess: () => router.back() });
-    else {
-      const { acknowledgeBadgeLoss: _unused, ...rest } = body;
-      create.mutate(
-        { ...rest, sources: rest.sources.length ? rest.sources : undefined },
-        { onSuccess: (p) => router.replace(`/post/${p.id}`) },
-      );
+        // Anexar ubicación si existe
+        if (p.location) {
+          fullContent += `\n\n📍 ${p.location}`;
+        }
+
+        // Anexar Espacio de audio si existe
+        if (p.spaceConfig) {
+          fullContent += `\n\n🎙️ Espacio: "${p.spaceConfig.title}" (${p.spaceConfig.scheduledAt ? `Programado: ${p.spaceConfig.scheduledAt}` : 'En directo'})`;
+        }
+
+        const rawTitle = p.text.trim().split('\n')[0] || (p.spaceConfig?.title ?? 'Post');
+        const title = rawTitle.length >= 10 ? rawTitle.slice(0, 80) : `${rawTitle} (Actualización)`;
+        const summary = fullContent.length >= 20 ? fullContent.slice(0, 250) : `${fullContent} - 4readers feed post`;
+
+        await createPost.mutateAsync({
+          categoryId: catId,
+          title,
+          summary,
+          content: fullContent.length >= 50 ? fullContent : `${fullContent}\n\n[Publicado desde 4readers móvil]`,
+          coverImageUrl: p.images[0] || p.gifUrl,
+        });
+      }
+
+      toast.success(posts.length > 1 ? '¡Hilo publicado con éxito!' : '¡Publicado con éxito!');
+      router.navigate('/');
+    } catch {
+      toast.error('No se pudo publicar. Revisa los datos.');
     }
   };
 
-  const selectedCategoryName = (categories.data ?? []).find((c) => c.id === f.categoryId)?.name;
-  const filledSourcesCount = sources.filter((s) => s.title.trim() || s.url.trim() || s.publisher.trim()).length;
+  const screenBg = isDark ? '#000000' : '#FFFFFF';
+  const textPrimary = isDark ? '#FFFFFF' : '#0F1419';
+  const textSecondary = '#71767B';
+  const lineCol = isDark ? '#2F3336' : '#CFD9DE';
+
+  const audienceLabel = useMemo(() => {
+    switch (audience) {
+      case 'following':
+        return 'Las personas que sigues pueden responder';
+      case 'mentioned':
+        return 'Solo las personas mencionadas pueden responder';
+      default:
+        return 'Cualquier persona puede responder';
+    }
+  }, [audience]);
 
   return (
-    <Screen>
-      <NavHeader
-        title={editing ? 'Editar artículo' : 'Escribir un artículo'}
-        onBack={step > 0 ? () => setStep((s) => s - 1) : undefined}
-      />
-      <Stepper steps={STEPS} current={step} onSelect={goToStep} />
+    <Screen edges={['top', 'bottom']} style={{ backgroundColor: screenBg }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        {/* Cabecera estilo X (Imagen 1): [X] a la izquierda, [Publicar] azul redondeado a la derecha */}
+        <View style={s.topHeader}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar"
+          >
+            <Feather name="x" size={24} color={textPrimary} />
+          </Pressable>
 
-      <FormScroll>
-        {apiError && <Banner message={apiError.message} details={apiError.details} />}
-
-        {step === 0 && (
-          <>
-            <Section title="Categoría">
-              <View style={{ marginHorizontal: -20 }}>
-                <ChipRow
-                  options={(categories.data ?? []).map((c) => ({ key: c.id, label: c.name }))}
-                  value={f.categoryId}
-                  onChange={set('categoryId')}
-                />
-              </View>
-              {errors.categoryId && <Text variant="caption" color="danger">{errors.categoryId}</Text>}
-            </Section>
-
-            {myOrgs.length > 0 && (
-              <Section title="Publicar en nombre de">
-                <View style={{ marginHorizontal: -20 }}>
-                  <ChipRow
-                    options={[
-                      { key: '', label: 'Cuenta personal' },
-                      ...myOrgs.map((o) => ({ key: o.id, label: o.name })),
-                    ]}
-                    value={f.organizationId}
-                    onChange={set('organizationId')}
-                  />
-                </View>
-              </Section>
-            )}
-
-            <Field
-              label="Título"
-              value={f.title}
-              onChangeText={set('title')}
-              error={errors.title}
-              maxLength={180}
-              hint={`${f.title.trim().length}/180 caracteres (mínimo 10).`}
-            />
-
-            <Field
-              label="Resumen"
-              value={f.summary}
-              onChangeText={set('summary')}
-              error={errors.summary}
-              multiline
-              maxLength={350}
-              hint={`${f.summary.trim().length}/350 caracteres (entre 20 y 350).`}
-              style={{ minHeight: 96 }}
-            />
-
-            <Field
-              label="Imagen de portada (https:// opcional)"
-              value={f.coverImageUrl}
-              onChangeText={set('coverImageUrl')}
-              error={errors.coverImageUrl}
-              autoCapitalize="none"
-              keyboardType="url"
-              placeholder="https://"
-              hint="Si lo dejas vacío se generará una portada artística según la categoría."
-            />
-
-            <Button
-              title="Continuar al contenido"
-              icon="arrow-right"
-              onPress={nextStep}
-              disabled={editing && !hydrated}
-            />
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <Field
-              label="Contenido del artículo"
-              value={f.content}
-              onChangeText={set('content')}
-              error={errors.content}
-              multiline
-              hint={`${f.content.trim().length} caracteres escritos (mínimo 50).`}
-              style={{ minHeight: 240 }}
-            />
-
-            <Field
-              label="Precio de acceso exclusivo (fichas, opcional)"
-              value={f.unlockPriceTokens}
-              onChangeText={set('unlockPriceTokens')}
-              error={errors.unlockPriceTokens}
-              keyboardType="number-pad"
-              placeholder="0 (acceso libre y gratuito)"
-              hint="Deja 0 o vacío para lectura abierta, o indica entre 1 y 5000 fichas para artículo premium."
-            />
-
-            <View style={{ flexDirection: 'row', gap: space.md }}>
-              <Button
-                title="Atrás"
-                variant="secondary"
-                onPress={() => setStep(0)}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Continuar a fuentes"
-                icon="arrow-right"
-                onPress={nextStep}
-                style={{ flex: 2 }}
-              />
-            </View>
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <Card style={{ gap: space.xs }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text variant="label">{editing ? 'Revisión final' : 'Publicar es gratis'}</Text>
-                <Badge
-                  label={filledSourcesCount > 0 ? `${filledSourcesCount} fuente(s)` : 'Sin fuentes'}
-                  tone={filledSourcesCount > 0 ? 'success' : 'neutral'}
-                />
-              </View>
-              <Text variant="caption">
-                {editing
-                  ? 'Si el moderador pidió aclaraciones, después podrás reenviarlo sin pagar de nuevo.'
-                  : `Para conseguir la insignia de verificación añade enlaces https:// y solicítala desde el artículo${wallet.data ? ` (${wallet.data.verificationCost} fichas)` : ''}.`}
-              </Text>
-            </Card>
-
-            <Section
-              title="Fuentes (opcionales para publicar)"
-              action={
-                <Button
-                  title="Agregar"
-                  size="sm"
-                  variant="secondary"
-                  icon="plus"
-                  onPress={() => setSources((s) => [...s, emptySource()])}
-                />
-              }
+          <View style={s.headerRightSide}>
+            {/* Pill Publicar */}
+            <Pressable
+              onPress={handlePublish}
+              disabled={!hasContent || isSubmitting}
+              style={({ pressed }) => [
+                s.publishBtn,
+                (!hasContent || isSubmitting) && s.publishBtnDisabled,
+                pressed && { opacity: 0.8 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Publicar"
             >
-              {sources.map((s, i) => (
-                <Card key={i} style={{ gap: space.md }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text variant="label">Fuente #{i + 1}</Text>
-                    {sources.length > 1 && (
-                      <Button
-                        title="Quitar"
-                        size="sm"
-                        variant="ghost"
-                        onPress={() => {
-                          setSources((x) => x.filter((_, j) => j !== i));
-                          setSrcErrors((x) => x.filter((_, j) => j !== i));
-                        }}
-                      />
-                    )}
-                  </View>
-                  <Field
-                    label="Título de la fuente"
-                    value={s.title}
-                    onChangeText={setSource(i, 'title')}
-                    error={srcErrors[i]?.title}
-                  />
-                  <Field
-                    label="Medio o editorial"
-                    value={s.publisher}
-                    onChangeText={setSource(i, 'publisher')}
-                    error={srcErrors[i]?.publisher}
-                  />
-                  <Field
-                    label="Enlace (https://)"
-                    value={s.url}
-                    onChangeText={setSource(i, 'url')}
-                    error={srcErrors[i]?.url}
-                    autoCapitalize="none"
-                    keyboardType="url"
-                    placeholder="https://"
-                  />
-                </Card>
-              ))}
-            </Section>
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={s.publishBtnText}>
+                  {posts.length > 1 ? 'Publicar todo' : 'Publicar'}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
 
-            <View style={{ flexDirection: 'row', gap: space.md }}>
-              <Button
-                title="Atrás"
-                variant="secondary"
-                onPress={() => setStep(1)}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title={editing ? 'Guardar cambios' : 'Publicar'}
-                icon="check"
-                onPress={submit}
-                loading={mutation.isPending}
-                disabled={editing && !hydrated}
-                style={{ flex: 2 }}
-              />
+        {/* Lista de posts conectados (Threads) */}
+        <ScrollView
+          ref={scrollRef}
+          style={s.scrollView}
+          contentContainerStyle={s.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {posts.map((postItem, idx) => {
+            const isLast = idx === posts.length - 1;
+            const isItemFocused = focusedIndex === idx;
+
+            return (
+              <View key={postItem.id} style={s.postRowWrapper}>
+                {/* Columna Izquierda: Avatar y línea conectora del hilo */}
+                <View style={s.avatarColumn}>
+                  <Avatar
+                    name={me?.username ?? 'Tú'}
+                    avatarUrl={me?.avatarUrl}
+                    size={40}
+                  />
+                  {!isLast && <View style={[s.threadLine, { backgroundColor: lineCol }]} />}
+                </View>
+
+                {/* Columna Derecha: Entrada de texto, adjuntos y herramientas */}
+                <View style={s.contentColumn}>
+                  {posts.length > 1 && (
+                    <View style={s.threadHeaderInfo}>
+                      <Text style={s.threadIndexText}>Post {idx + 1} de {posts.length}</Text>
+                      {idx > 0 && (
+                        <Pressable
+                          onPress={() => removeThreadPost(idx)}
+                          hitSlop={8}
+                          style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                        >
+                          <Feather name="x" size={16} color="#71767B" />
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
+
+                  {/* TextInput principal: ¿Qué está pasando? (Imagen 1) */}
+                  <TextInput
+                    value={postItem.text}
+                    onChangeText={(t) =>
+                      updateActivePost((p) => ({ ...p, text: t }))
+                    }
+                    onFocus={() => setFocusedIndex(idx)}
+                    autoFocus={idx === 0}
+                    multiline
+                    placeholder={idx === 0 ? '¿Qué está pasando?' : 'Añade otro post...'}
+                    placeholderTextColor={textSecondary}
+                    style={[s.mainTextInput, { color: textPrimary }]}
+                  />
+
+                  {/* Previsualización de imágenes adjuntas (1 a 4) */}
+                  {postItem.images.length > 0 && (
+                    <View
+                      style={[
+                        s.imagesGrid,
+                        postItem.images.length > 1 && s.imagesGridMulti,
+                      ]}
+                    >
+                      {postItem.images.map((imgUri, imgIdx) => (
+                        <View
+                          key={imgUri + imgIdx}
+                          style={[
+                            s.imageBox,
+                            postItem.images.length === 1 && s.imageBoxSingle,
+                            postItem.images.length > 1 && s.imageBoxHalf,
+                          ]}
+                        >
+                          <Image source={{ uri: imgUri }} style={s.attachedImage} />
+                          <Pressable
+                            onPress={() => {
+                              updateActivePost((p) => ({
+                                ...p,
+                                images: p.images.filter((_, i) => i !== imgIdx),
+                              }));
+                            }}
+                            style={s.removeImageBtn}
+                            hitSlop={6}
+                          >
+                            <Feather name="x" size={14} color="#FFFFFF" />
+                          </Pressable>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Previsualización de GIF */}
+                  {postItem.gifUrl && (
+                    <View style={s.gifPreviewBox}>
+                      <Image source={{ uri: postItem.gifUrl }} style={s.gifPreviewImg} />
+                      <View style={s.gifBadge}>
+                        <Text style={s.gifBadgeText}>GIF</Text>
+                      </View>
+                      <Pressable
+                        onPress={() => updateActivePost((p) => ({ ...p, gifUrl: undefined }))}
+                        style={s.removeImageBtn}
+                      >
+                        <Feather name="x" size={14} color="#FFFFFF" />
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {/* Previsualización de Ubicación */}
+                  {postItem.location && (
+                    <View style={s.locationChip}>
+                      <Feather name="map-pin" size={13} color="#1D9BF0" />
+                      <Text style={s.locationChipText}>{postItem.location}</Text>
+                      <Pressable
+                        onPress={() => updateActivePost((p) => ({ ...p, location: undefined }))}
+                        hitSlop={6}
+                      >
+                        <Feather name="x" size={13} color="#71767B" />
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {/* Previsualización de Espacio de Audio (Imágenes 3, 4, 5) */}
+                  {postItem.spaceConfig && (
+                    <View style={s.spaceCard}>
+                      <View style={s.spaceCardTop}>
+                        <View style={s.spaceStatusBadge}>
+                          <View
+                            style={[
+                              s.spaceStatusDot,
+                              { backgroundColor: postItem.spaceConfig.isLive ? '#F4212E' : '#7856FF' },
+                            ]}
+                          />
+                          <Text style={s.spaceStatusText}>
+                            {postItem.spaceConfig.isLive ? 'ESPACIO EN DIRECTO' : 'ESPACIO PROGRAMADO'}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() => updateActivePost((p) => ({ ...p, spaceConfig: null }))}
+                          hitSlop={6}
+                        >
+                          <Feather name="x" size={16} color="#71767B" />
+                        </Pressable>
+                      </View>
+
+                      <Text style={[s.spaceCardTitle, { color: textPrimary }]}>
+                        {postItem.spaceConfig.title}
+                      </Text>
+
+                      {postItem.spaceConfig.scheduledAt && (
+                        <View style={s.spaceScheduleRow}>
+                          <Feather name="clock" size={13} color="#7856FF" />
+                          <Text style={s.spaceScheduleText}>
+                            {postItem.spaceConfig.scheduledAt}
+                          </Text>
+                        </View>
+                      )}
+
+                      <View style={s.spaceTagsRow}>
+                        {postItem.spaceConfig.topics.map((t) => (
+                          <View key={t} style={s.spaceTag}>
+                            <Text style={s.spaceTagText}>#{t}</Text>
+                          </View>
+                        ))}
+                        {postItem.spaceConfig.record && (
+                          <View style={[s.spaceTag, { backgroundColor: '#351F5F' }]}>
+                            <Text style={[s.spaceTagText, { color: '#E1E8ED' }]}>🔴 Grabación activada</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Editor de Encuesta (Imagen 2) */}
+                  {postItem.poll && (
+                    <PollEditor
+                      poll={postItem.poll}
+                      onChange={(updated) => updateActivePost((p) => ({ ...p, poll: updated }))}
+                    />
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+
+        {/* Selector de audiencia: "Cualquier persona puede responder" (Imagen 1) */}
+        <View style={s.audienceRow}>
+          <Pressable
+            onPress={() => setShowAudienceModal(true)}
+            style={({ pressed }) => [s.audienceBtn, pressed && { opacity: 0.7 }]}
+          >
+            <Feather name="globe" size={15} color="#1D9BF0" />
+            <Text style={s.audienceText}>{audienceLabel}</Text>
+          </Pressable>
+        </View>
+
+        {/* Barra inferior de herramientas (Imagen 1) */}
+        <View style={[s.toolbarContainer, { borderTopColor: lineCol }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.toolbarScroll}
+          >
+            {/* 1. Añadir imágenes desde Galería */}
+            <Pressable
+              onPress={handlePickImages}
+              hitSlop={8}
+              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Añadir imágenes"
+            >
+              <Feather name="image" size={21} color="#1D9BF0" />
+            </Pressable>
+
+            {/* 2. Capturar con Cámara */}
+            <Pressable
+              onPress={handleTakePhoto}
+              hitSlop={8}
+              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Capturar con la cámara"
+            >
+              <Feather name="camera" size={21} color="#1D9BF0" />
+            </Pressable>
+
+            {/* 3. Voces / Espacio de audio (Imágenes 3, 4, 5) */}
+            <Pressable
+              onPress={() => setShowSpacesModal(true)}
+              hitSlop={8}
+              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Crear un Espacio de voz"
+            >
+              <View style={s.liveIconWrap}>
+                <Feather name="radio" size={21} color="#1D9BF0" />
+              </View>
+            </Pressable>
+
+            {/* 4. GIFs */}
+            <Pressable
+              onPress={() => setShowGifModal(true)}
+              hitSlop={8}
+              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Añadir GIF"
+            >
+              <View style={s.gifPill}>
+                <Text style={s.gifPillText}>GIF</Text>
+              </View>
+            </Pressable>
+
+            {/* 5. Listas / Encuestas (Imagen 2) */}
+            <Pressable
+              onPress={handleTogglePoll}
+              hitSlop={8}
+              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Añadir encuesta"
+            >
+              <Feather name="bar-chart-2" size={21} color="#1D9BF0" />
+            </Pressable>
+
+            {/* 6. Insertar ubicaciones */}
+            <Pressable
+              onPress={() => setShowLocationModal(true)}
+              hitSlop={8}
+              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Insertar ubicación"
+            >
+              <Feather name="map-pin" size={21} color="#1D9BF0" />
+            </Pressable>
+
+            {/* 7. Categoría de publicación */}
+            {categories.length > 0 && (
+              <Pressable
+                onPress={() => {
+                  const curIdx = categories.findIndex((c) => c.id === selectedCategoryId);
+                  const nextCat = categories[(curIdx + 1) % categories.length];
+                  setSelectedCategoryId(nextCat.id);
+                  toast.info(`Categoría: ${nextCat.name}`);
+                }}
+                hitSlop={8}
+                style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Elegir categoría"
+              >
+                <Feather name="tag" size={20} color="#1D9BF0" />
+              </Pressable>
+            )}
+          </ScrollView>
+
+          {/* Lado derecho de la barra: Contador circular y Conectar posts (+) */}
+          <View style={s.toolbarRightSide}>
+            {/* Indicador circular de caracteres */}
+            <View style={s.circleProgressWrap}>
+              <View
+                style={[
+                  s.miniCircle,
+                  {
+                    borderColor:
+                      totalCharsInActive > maxChars
+                        ? '#F4212E'
+                        : totalCharsInActive > maxChars - 20
+                          ? '#FFD400'
+                          : '#1D9BF0',
+                  },
+                ]}
+              >
+                {totalCharsInActive > maxChars - 20 && (
+                  <Text
+                    style={[
+                      s.circleCharsText,
+                      { color: totalCharsInActive > maxChars ? '#F4212E' : textSecondary },
+                    ]}
+                  >
+                    {maxChars - totalCharsInActive}
+                  </Text>
+                )}
+              </View>
             </View>
-          </>
-        )}
-      </FormScroll>
+
+            <View style={[s.verticalDivider, { backgroundColor: lineCol }]} />
+
+            {/* Botón (+) Conectar varios posts (Hilo / Threads) */}
+            <Pressable
+              onPress={addThreadPost}
+              hitSlop={8}
+              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Conectar otro post a este hilo"
+            >
+              <Feather name="plus-circle" size={24} color="#1D9BF0" />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* MODALES ADJUNTOS */}
+        <AudienceModal
+          visible={showAudienceModal}
+          selected={audience}
+          onSelect={setAudience}
+          onClose={() => setShowAudienceModal(false)}
+        />
+
+        <SpacesModal
+          visible={showSpacesModal}
+          onClose={() => setShowSpacesModal(false)}
+          onConfirm={(config) => updateActivePost((p) => ({ ...p, spaceConfig: config }))}
+        />
+
+        <GifModal
+          visible={showGifModal}
+          onClose={() => setShowGifModal(false)}
+          onSelectGif={(url) => updateActivePost((p) => ({ ...p, gifUrl: url }))}
+        />
+
+        <LocationModal
+          visible={showLocationModal}
+          onClose={() => setShowLocationModal(false)}
+          onSelectLocation={(loc) => updateActivePost((p) => ({ ...p, location: loc }))}
+        />
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
+
+const s = StyleSheet.create({
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: gutter,
+    paddingVertical: space.sm,
+  },
+  headerRightSide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  publishBtn: {
+    backgroundColor: '#1D9BF0',
+    paddingHorizontal: 18,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  publishBtnDisabled: {
+    opacity: 0.5,
+  },
+  publishBtnText: {
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
+    fontSize: 15,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: gutter,
+    paddingTop: space.sm,
+    paddingBottom: 40,
+  },
+  postRowWrapper: {
+    flexDirection: 'row',
+    marginBottom: space.md,
+  },
+  avatarColumn: {
+    alignItems: 'center',
+    width: 44,
+    marginRight: 10,
+  },
+  threadLine: {
+    width: 2,
+    flex: 1,
+    marginTop: 6,
+    borderRadius: 1,
+  },
+  contentColumn: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  threadHeaderInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  threadIndexText: {
+    fontSize: 12,
+    color: '#71767B',
+    fontFamily: fonts.medium,
+  },
+  mainTextInput: {
+    fontSize: 18,
+    fontFamily: fonts.regular,
+    lineHeight: 24,
+    minHeight: 70,
+    textAlignVertical: 'top',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  imagesGrid: {
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    marginTop: 10,
+    gap: 6,
+  },
+  imagesGridMulti: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  imageBox: {
+    position: 'relative',
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    backgroundColor: '#16181C',
+  },
+  imageBoxSingle: {
+    width: '100%',
+    height: 220,
+  },
+  imageBoxHalf: {
+    width: '48.5%',
+    height: 140,
+  },
+  attachedImage: {
+    width: '100%',
+    height: '100%',
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gifPreviewBox: {
+    position: 'relative',
+    width: '100%',
+    height: 180,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    marginTop: 10,
+    backgroundColor: '#16181C',
+  },
+  gifPreviewImg: {
+    width: '100%',
+    height: '100%',
+  },
+  gifBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  gifBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontFamily: fonts.bold,
+  },
+  locationChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(29, 155, 240, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    marginTop: 8,
+  },
+  locationChipText: {
+    fontSize: 13,
+    color: '#1D9BF0',
+    fontFamily: fonts.medium,
+  },
+  spaceCard: {
+    backgroundColor: '#201633',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#7856FF',
+    padding: 12,
+    marginTop: 10,
+    gap: 6,
+  },
+  spaceCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  spaceStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  spaceStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  spaceStatusText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontFamily: fonts.bold,
+  },
+  spaceCardTitle: {
+    fontSize: 16,
+    fontFamily: fonts.bold,
+  },
+  spaceScheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  spaceScheduleText: {
+    fontSize: 13,
+    color: '#A78BFA',
+    fontFamily: fonts.medium,
+  },
+  spaceTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  spaceTag: {
+    backgroundColor: '#30214C',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  spaceTagText: {
+    fontSize: 11,
+    color: '#D8B4FE',
+    fontFamily: fonts.medium,
+  },
+  audienceRow: {
+    paddingHorizontal: gutter,
+    paddingVertical: 8,
+  },
+  audienceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+  },
+  audienceText: {
+    fontSize: 14,
+    color: '#1D9BF0',
+    fontFamily: fonts.bold,
+  },
+  toolbarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: gutter,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  toolbarScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  toolBtn: {
+    padding: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  liveIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gifPill: {
+    borderWidth: 1.5,
+    borderColor: '#1D9BF0',
+    borderRadius: 5,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gifPillText: {
+    color: '#1D9BF0',
+    fontSize: 11,
+    fontFamily: fonts.bold,
+  },
+  toolbarRightSide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingLeft: 8,
+  },
+  circleProgressWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  circleCharsText: {
+    fontSize: 10,
+    fontFamily: fonts.bold,
+  },
+  verticalDivider: {
+    width: 1,
+    height: 22,
+  },
+});
