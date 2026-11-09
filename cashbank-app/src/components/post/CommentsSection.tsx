@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { flat, total, useMe, usePostComments, useResolveComment } from '@/api/hooks';
 import type { Post } from '@/api/types';
 import { formatRelativeDate } from '@/lib/format';
-import { Avatar, Badge, Button, Card, colors, radius, Section, space, Text } from '@/ui';
+import { Avatar, Badge, Button, Card, colors, radius, Section, space, Text, useTheme } from '@/ui';
 
 /**
  * Sección de comentarios y solicitudes de corrección:
@@ -13,6 +13,11 @@ import { Avatar, Badge, Button, Card, colors, radius, Section, space, Text } fro
  * - Muestra las respuestas y fuentes verificables aportadas por los lectores.
  */
 export function CommentsSection({ post }: { post: Post }) {
+  const { isDark, colors } = useTheme();
+  const subtleBg = isDark ? '#16181C' : '#F7F9F9';
+  const borderColor = isDark ? '#2F3336' : '#E2E8F0';
+  const promptTextColor = isDark ? '#71767B' : '#536471';
+
   const me = useMe().data;
   const commentsQuery = usePostComments(post.id);
   const resolveComment = useResolveComment(post.id);
@@ -47,14 +52,18 @@ export function CommentsSection({ post }: { post: Post }) {
         onPress={() => openComposer()}
         accessibilityRole="button"
         accessibilityLabel="Publicar tu respuesta"
-        style={({ pressed }) => [s.promptBar, pressed && { opacity: 0.8 }]}
+        style={({ pressed }) => [
+          s.promptBar,
+          { backgroundColor: subtleBg, borderColor },
+          pressed && { opacity: 0.8 },
+        ]}
       >
         <Avatar name={me?.username ?? 'Tú'} avatarUrl={me?.avatarUrl} size={36} />
-        <Text variant="body" style={s.promptText} numberOfLines={1}>
+        <Text variant="body" style={[s.promptText, { color: promptTextColor }]} numberOfLines={1}>
           Publicar tu respuesta…
         </Text>
-        <View style={s.replyPill}>
-          <Text variant="label" style={{ color: colors.onInk, fontSize: 13 }}>
+        <View style={[s.replyPill, { backgroundColor: isDark ? '#FFFFFF' : '#0F1419' }]}>
+          <Text variant="label" style={{ color: isDark ? '#000000' : '#FFFFFF', fontSize: 13 }}>
             Responder
           </Text>
         </View>
@@ -62,7 +71,7 @@ export function CommentsSection({ post }: { post: Post }) {
 
       {/* Lista de comentarios y correcciones */}
       {comments.length === 0 ? (
-        <Card>
+        <Card style={{ backgroundColor: subtleBg, borderColor }}>
           <Text variant="caption">
             Aún no hay respuestas. Toca arriba para publicar la primera o aportar una fuente verificable.
           </Text>

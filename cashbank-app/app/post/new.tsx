@@ -211,11 +211,15 @@ export default function NewPostScreen() {
     try {
       if (editing && edit) {
         const primary = posts[0];
+        let editContent = primary.text;
+        if (primary.gifUrl) {
+          editContent += `\n\n![GIF](${primary.gifUrl})`;
+        }
         await updatePost.mutateAsync({
           title: primary.text.slice(0, 60) || 'Publicación',
-          summary: primary.text.slice(0, 150) || primary.text,
-          content: primary.text,
-          coverImageUrl: primary.images[0] || primary.gifUrl,
+          summary: primary.text.length > 80 ? primary.text.slice(0, 120) + '...' : 'Publicación de autor',
+          content: editContent,
+          coverImageUrl: primary.images[0] || undefined,
         });
         toast.success('Publicación actualizada');
         router.back();
@@ -245,16 +249,31 @@ export default function NewPostScreen() {
           fullContent += `\n\n🎙️ Espacio: "${p.spaceConfig.title}" (${p.spaceConfig.scheduledAt ? `Programado: ${p.spaceConfig.scheduledAt}` : 'En directo'})`;
         }
 
-        const rawTitle = p.text.trim().split('\n')[0] || (p.spaceConfig?.title ?? 'Post');
+        // El GIF va DENTRO del post (entre el contenido), NUNCA en el banner
+        if (p.gifUrl) {
+          fullContent += `\n\n![GIF](${p.gifUrl})`;
+        }
+
+        // Imágenes adicionales dentro del post
+        if (p.images.length > 0) {
+          p.images.forEach((img) => {
+            fullContent += `\n\n![Imagen](${img})`;
+          });
+        }
+
+        const cleanText = p.text.trim();
+        const rawTitle = cleanText.split('\n')[0] || (p.spaceConfig?.title ?? 'Publicación');
         const title = rawTitle.length >= 10 ? rawTitle.slice(0, 80) : `${rawTitle} (Actualización)`;
-        const summary = fullContent.length >= 20 ? fullContent.slice(0, 250) : `${fullContent} - 4readers feed post`;
+        // Summary limpio de metadatos (evita duplicar el contenido del post)
+        const summary = cleanText.length > 80 ? cleanText.slice(0, 120) + '...' : `Publicado por @${me?.username ?? 'autor'}`;
 
         await createPost.mutateAsync({
           categoryId: catId,
           title,
           summary,
           content: fullContent.length >= 50 ? fullContent : `${fullContent}\n\n[Publicado desde 4readers móvil]`,
-          coverImageUrl: p.images[0] || p.gifUrl,
+          // El banner es SOLO para fotos reales de portada, NUNCA para GIFs
+          coverImageUrl: p.images.length > 0 ? p.images[0] : undefined,
         });
       }
 

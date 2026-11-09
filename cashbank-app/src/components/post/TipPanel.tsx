@@ -4,12 +4,17 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ApiError } from '@/api/client';
 import { useTip } from '@/api/hooks';
 import type { Post } from '@/api/types';
-import { Banner, Button, Card, colors, fonts, space, Text, toast } from '@/ui';
+import { Banner, Button, Card, colors, fonts, space, Text, toast, useTheme } from '@/ui';
 
 const TIP_OPTIONS = ['5', '10', '25', '50'];
 
 /** Propina en fichas a quien escribió el artículo (la plataforma retiene una pequeña comisión). */
 export function TipPanel({ post }: { post: Post }) {
+  const { isDark, colors } = useTheme();
+  const cardBg = isDark ? '#16181C' : '#FFFFFF';
+  const borderCol = isDark ? '#2F3336' : '#E2E8F0';
+  const chipBg = isDark ? '#202327' : '#F7F9F9';
+
   const [amount, setAmount] = useState('10');
   const tip = useTip(post.id);
   const err = tip.error instanceof ApiError ? tip.error : null;
@@ -31,8 +36,10 @@ export function TipPanel({ post }: { post: Post }) {
   };
 
   return (
-    <Card style={{ gap: space.md }}>
-      <Text variant="heading">Apoya a {post.authorUsername ?? 'este autor'}</Text>
+    <Card style={{ gap: space.md, backgroundColor: cardBg, borderColor: borderCol }}>
+      <Text variant="heading" style={{ color: isDark ? '#FFFFFF' : '#0F1419' }}>
+        Apoya a {post.authorUsername ?? 'este autor'}
+      </Text>
 
       {/* 4 botones de fichas con borde 100 distribuidos al 100% de ancho sin cortes ni scroll */}
       <View style={s.chipsRow}>
@@ -44,11 +51,28 @@ export function TipPanel({ post }: { post: Post }) {
               onPress={() => setAmount(n)}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
-              style={[s.chip, active && s.chipActive]}
+              style={[
+                s.chip,
+                {
+                  backgroundColor: active
+                    ? (isDark ? '#FFFFFF' : '#0F1419')
+                    : chipBg,
+                  borderColor: active
+                    ? (isDark ? '#FFFFFF' : '#0F1419')
+                    : borderCol,
+                },
+              ]}
             >
               <Text
                 variant="caption"
-                style={[s.chipText, active ? s.chipTextActive : s.chipTextInactive]}
+                style={[
+                  s.chipText,
+                  {
+                    color: active
+                      ? (isDark ? '#000000' : '#FFFFFF')
+                      : (isDark ? '#A1A1AA' : '#536471'),
+                  },
+                ]}
               >
                 {n} fichas
               </Text>

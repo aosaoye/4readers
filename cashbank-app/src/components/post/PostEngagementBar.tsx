@@ -8,7 +8,7 @@ import { API_URL } from '@/config';
 import { useIsBookmarked, useToggleBookmark } from '@/lib/bookmarks';
 import { useIsReposted, useRepostPost } from '@/lib/reposts';
 import { hash } from '@/ui/Avatar';
-import { colors, fonts, radius, space, Text } from '@/ui';
+import { colors, fonts, radius, space, Text, useTheme } from '@/ui';
 
 function formatCompact(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`;
@@ -30,6 +30,10 @@ export function PostEngagementBar({
   post: Post;
   onPressComments?: () => void;
 }) {
+  const { isDark, colors: themeColors } = useTheme();
+  const iconMuted = isDark ? '#71767B' : '#536471';
+  const borderCol = isDark ? '#2F3336' : '#E2E8F0';
+
   const commentsQuery = usePostComments(post.id);
   const commentsCount = total(commentsQuery.data) || flat(commentsQuery.data).length;
 
@@ -71,7 +75,7 @@ export function PostEngagementBar({
     });
 
   return (
-    <View style={s.bar}>
+    <View style={[s.bar, { borderColor: borderCol }]}>
       {/* Comentarios */}
       <Pressable
         onPress={openComments}
@@ -80,8 +84,8 @@ export function PostEngagementBar({
         accessibilityLabel={`Ver ${commentsCount} comentarios`}
         style={({ pressed }) => [s.item, pressed && { opacity: 0.65 }]}
       >
-        <Feather name="message-circle" size={18} color={colors.muted} />
-        <Text variant="caption" style={s.count}>
+        <Feather name="message-circle" size={18} color={iconMuted} />
+        <Text variant="caption" style={[s.count, { color: iconMuted }]}>
           {formatCompact(commentsCount)}
         </Text>
       </Pressable>
@@ -96,13 +100,13 @@ export function PostEngagementBar({
         style={({ pressed }) => [s.item, pressed && { opacity: 0.65 }]}
       >
         {repostMutation.isPending ? (
-          <ActivityIndicator size="small" color={colors.success} />
+          <ActivityIndicator size="small" color={themeColors.success} />
         ) : (
-          <Feather name="repeat" size={18} color={isReposted ? colors.success : colors.muted} />
+          <Feather name="repeat" size={18} color={isReposted ? themeColors.success : iconMuted} />
         )}
         <Text
           variant="caption"
-          style={[s.count, isReposted && { color: colors.success, fontFamily: fonts.bold }]}
+          style={[s.count, { color: isReposted ? themeColors.success : iconMuted }, isReposted && { fontFamily: fonts.bold }]}
         >
           {formatCompact(repostsCount)}
         </Text>
@@ -116,10 +120,10 @@ export function PostEngagementBar({
         accessibilityLabel={liked ? 'Quitar me gusta' : 'Me gusta'}
         style={({ pressed }) => [s.item, pressed && { opacity: 0.65 }]}
       >
-        <Feather name="heart" size={18} color={liked ? colors.danger : colors.muted} />
+        <Feather name="heart" size={18} color={liked ? themeColors.danger : iconMuted} />
         <Text
           variant="caption"
-          style={[s.count, liked && { color: colors.danger, fontFamily: fonts.bold }]}
+          style={[s.count, { color: liked ? themeColors.danger : iconMuted }, liked && { fontFamily: fonts.bold }]}
         >
           {formatCompact(likesCount)}
         </Text>
@@ -133,8 +137,8 @@ export function PostEngagementBar({
         accessibilityLabel={`Audiencia total ${formatCompact(baseAudience)}`}
         style={({ pressed }) => [s.item, pressed && { opacity: 0.65 }]}
       >
-        <Feather name="bar-chart-2" size={18} color={colors.muted} />
-        <Text variant="caption" style={s.count}>
+        <Feather name="bar-chart-2" size={18} color={iconMuted} />
+        <Text variant="caption" style={[s.count, { color: iconMuted }]}>
           {formatCompact(baseAudience)}
         </Text>
       </Pressable>
@@ -148,7 +152,7 @@ export function PostEngagementBar({
           accessibilityLabel={saved ? 'Quitar de guardados' : 'Guardar'}
           style={({ pressed }) => [s.iconOnly, pressed && { opacity: 0.65 }]}
         >
-          <Feather name="bookmark" size={18} color={saved ? colors.accent : colors.muted} />
+          <Feather name="bookmark" size={18} color={saved ? themeColors.accent : iconMuted} />
         </Pressable>
 
         <Pressable
@@ -158,7 +162,7 @@ export function PostEngagementBar({
           accessibilityLabel="Compartir enlace"
           style={({ pressed }) => [s.iconOnly, pressed && { opacity: 0.65 }]}
         >
-          <Feather name="share-2" size={18} color={colors.muted} />
+          <Feather name="share-2" size={18} color={iconMuted} />
         </Pressable>
       </View>
     </View>

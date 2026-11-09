@@ -3,10 +3,31 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuthor, useFollowAuthor, useMe, usePost, useUnfollowAuthor } from '@/api/hooks';
-import { PostEngagementBar, PremiumUnlockPanel, TipPanel, VerificationPanel } from '@/components';
+import {
+  useAuthor,
+  useFollowAuthor,
+  useMe,
+  usePost,
+  useUnfollowAuthor,
+} from '@/api/hooks';
+import {
+  CommentsSection,
+  PostEngagementBar,
+  PremiumUnlockPanel,
+  TipPanel,
+  VerificationPanel,
+} from '@/components';
 import { API_URL } from '@/config';
 import { useIsBookmarked, useToggleBookmark } from '@/lib/bookmarks';
 import { formatDate, postStatusLabel, readingMinutes, verificationLabel } from '@/lib/format';
@@ -16,13 +37,11 @@ import {
   Badge,
   Button,
   Card,
-  colors,
   Cover,
   ErrorState,
   fonts,
   FormScrollContext,
   IconButton,
-  isDark,
   ListRow,
   NavHeader,
   radius,
@@ -33,7 +52,110 @@ import {
   Spinner,
   Text,
   useKeyboardScroll,
+  useTheme,
 } from '@/ui';
+
+/**
+ * Renderizador de contenido que permite insertar GIFs e imágenes DENTRO del post,
+ * chips de ubicación, tarjetas de espacio y encuestas sin duplicar texto.
+ */
+function PostContentRenderer({
+  content,
+  isDark,
+  textPrimary,
+  subtleBg,
+  borderColor,
+}: {
+  content: string;
+  isDark: boolean;
+  textPrimary: string;
+  subtleBg: string;
+  borderColor: string;
+}) {
+  const lines = content.split('\n');
+
+  return (
+    <View style={{ gap: 12 }}>
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return null;
+
+        // 1. Detectar GIF o Imagen con formato ![GIF](url) o ![Imagen](url)
+        const mediaMatch = trimmed.match(/^!\[(GIF|Imagen|image|.*?)\]\((https?:\/\/[^\s\)]+)\)$/i);
+        if (mediaMatch) {
+          const type = mediaMatch[1].toUpperCase();
+          const uri = mediaMatch[2];
+          const isGif = type.includes('GIF') || uri.toLowerCase().includes('.gif');
+
+          return (
+            <View key={idx} style={[s.inlineMediaCard, { backgroundColor: subtleBg, borderColor }]}>
+              <Image source={{ uri }} style={s.inlineMediaImg} resizeMode="cover" />
+              {isGif && (
+                <View style={s.inlineGifBadge}>
+                  <Text style={s.inlineGifBadgeText}>GIF</Text>
+                </View>
+              )}
+            </View>
+          );
+        }
+
+        // 2. URL de imagen o GIF suelta
+        if (/^https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp)(\?[^\s]*)?$/i.test(trimmed)) {
+          const isGif = trimmed.toLowerCase().includes('.gif');
+          return (
+            <View key={idx} style={[s.inlineMediaCard, { backgroundColor: subtleBg, borderColor }]}>
+              <Image source={{ uri: trimmed }} style={s.inlineMediaImg} resizeMode="cover" />
+              {isGif && (
+                <View style={s.inlineGifBadge}>
+                  <Text style={s.inlineGifBadgeText}>GIF</Text>
+                </View>
+              )}
+            </View>
+          );
+        }
+
+        // 3. Etiqueta de ubicación
+        if (trimmed.startsWith('📍')) {
+          return (
+            <View key={idx} style={[s.inlineLocationTag, { backgroundColor: isDark ? '#16181C' : '#EFF3F4' }]}>
+              <Feather name="map-pin" size={14} color="#1D9BF0" />
+              <Text style={[s.inlineLocationText, { color: textPrimary }]}>{trimmed.replace(/^📍\s*/, '')}</Text>
+            </View>
+          );
+        }
+
+        // 4. Tarjeta de Espacio de voz
+        if (trimmed.startsWith('🎙️')) {
+          return (
+            <View key={idx} style={[s.inlineSpaceCard, { backgroundColor: isDark ? '#201633' : '#F5F3FF', borderColor: '#7856FF' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Feather name="radio" size={16} color="#7856FF" />
+                <Text style={s.inlineSpaceTagText}>ESPACIO DE AUDIO</Text>
+              </View>
+              <Text style={[s.inlineSpaceTitle, { color: textPrimary }]}>{trimmed.replace(/^🎙️\s*/, '')}</Text>
+            </View>
+          );
+        }
+
+        // 5. Encuesta / Lista
+        if (trimmed.startsWith('📊 Encuesta') || trimmed.startsWith('•')) {
+          return (
+            <View key={idx} style={[s.inlinePollCard, { backgroundColor: subtleBg, borderColor }]}>
+              <Text style={{ fontSize: 14, color: textPrimary, fontFamily: fonts.medium }}>{trimmed}</Text>
+            </View>
+          );
+        }
+
+        // 6. Texto regular
+        return (
+          <Text key={idx} variant="body" style={[s.bodyText, { color: textPrimary }]} selectable>
+            {trimmed}
+          </Text>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function PostDetail() {
   const { id, fromAuthor } = useLocalSearchParams<{ id: string; fromAuthor?: string }>();
@@ -44,6 +166,16 @@ export default function PostDetail() {
   const toggle = useToggleBookmark();
   const [scrolled, setScrolled] = useState(false);
   const { scrollRef, kbHeight, ensureVisible, trackScroll } = useKeyboardScroll();
+
+  // Sistema de tema completamente reactivo (Light / Dark)
+  const { isDark, colors: themeColors } = useTheme();
+
+  const screenBg = isDark ? '#000000' : '#FFFFFF';
+  const cardBg = isDark ? '#121215' : '#FFFFFF';
+  const textPrimary = isDark ? '#FFFFFF' : '#0F1419';
+  const textSecondary = isDark ? '#71767B' : '#536471';
+  const borderColor = isDark ? '#2F3336' : '#E2E8F0';
+  const subtleBg = isDark ? '#16181C' : '#F7F9F9';
 
   const repostMeta = post ? parseRepost(post) : null;
   const authorUsername = repostMeta?.originalAuthor ?? post?.authorUsername ?? '';
@@ -83,13 +215,25 @@ export default function PostDetail() {
       url: certUrl,
     });
 
+  // Evitar duplicación de texto entre summary y content
+  const cleanSummary = (repostMeta?.cleanSummary ?? post.summary ?? '').trim();
+  const cleanContent = (post.content ?? '').trim();
+  const isSummaryDuplicate =
+    !cleanSummary ||
+    cleanSummary === cleanContent ||
+    cleanContent.startsWith(cleanSummary) ||
+    cleanSummary.includes('Publicado por @') ||
+    cleanSummary.includes('📍') ||
+    cleanSummary.includes('🎙️') ||
+    cleanSummary.includes('![GIF]');
+
   return (
     <FormScrollContext.Provider value={{ ensureVisible }}>
       <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: colors.bg }}
+        style={{ flex: 1, backgroundColor: screenBg }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <StatusBar style={scrolled && !isDark ? 'dark' : 'light'} />
+        <StatusBar style={scrolled ? (isDark ? 'light' : 'dark') : 'light'} />
         <ScrollView
           ref={scrollRef}
           contentContainerStyle={{ paddingBottom: kbHeight > 0 ? kbHeight + 140 : space.xxxl }}
@@ -103,20 +247,26 @@ export default function PostDetail() {
             if (isDown !== scrolled) setScrolled(isDown);
           }}
         >
-          <Cover seed={post.categoryId} imageUrl={post.coverImageUrl} style={{ height: 320 }} />
+          {/* Si el post no tiene portada específica (es un post de feed o tiene GIF adentro), usa altura compacta */}
+          <Cover
+            seed={post.categoryId}
+            imageUrl={post.coverImageUrl}
+            style={{ height: post.coverImageUrl ? 300 : 160 }}
+          />
 
-          <Sheet style={{ marginTop: -32, gap: space.xl, paddingTop: 28 }}>
+          <Sheet style={{ marginTop: -32, gap: space.xl, paddingTop: 28, backgroundColor: cardBg }}>
             {repostMeta?.isRepost && repostMeta.repostedBy && (
               <Pressable
                 onPress={() => router.navigate(`/author/${repostMeta.repostedBy}`)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
               >
-                <Feather name="repeat" size={14} color={colors.success} />
-                <Text variant="caption" style={{ color: colors.success, fontFamily: fonts.semibold }}>
+                <Feather name="repeat" size={14} color={themeColors.success} />
+                <Text variant="caption" style={{ color: themeColors.success, fontFamily: fonts.semibold }}>
                   Compartido por @{repostMeta.repostedBy} · Autor original: @{authorUsername}
                 </Text>
               </Pressable>
             )}
+
             {/* Categoría clicable + organización + insignias de estado */}
             <View style={{ flexDirection: 'row', gap: space.sm, flexWrap: 'wrap', alignItems: 'center' }}>
               {post.categoryName && (
@@ -146,7 +296,7 @@ export default function PostDetail() {
               {post.status !== 'PUBLISHED' && <Badge label={statusText} tone={statusTone} />}
             </View>
 
-            <Text variant="title">{post.title}</Text>
+            <Text variant="title" style={{ color: textPrimary }}>{post.title}</Text>
 
             {/* Fila de propietario/autor original con botón Seguir / Siguiendo + vista web */}
             <View style={s.authorBar}>
@@ -164,12 +314,14 @@ export default function PostDetail() {
                 />
                 <View style={{ flex: 1, gap: 2 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                    <Text variant="heading" numberOfLines={1} style={{ fontSize: 16, flexShrink: 1 }}>
+                    <Text variant="heading" numberOfLines={1} style={{ fontSize: 16, flexShrink: 1, color: textPrimary }}>
                       {authorUsername || 'Autor'}
                     </Text>
-                    {post.isVerified && <Feather name="check-circle" size={15} color={colors.success} />}
+                    {post.isVerified && <Feather name="check-circle" size={15} color={themeColors.success} />}
                   </View>
-                  <Text variant="caption">{formatDate(post.publishedAt ?? post.createdAt)}</Text>
+                  <Text variant="caption" style={{ color: textSecondary }}>
+                    {formatDate(post.publishedAt ?? post.createdAt)}
+                  </Text>
                 </View>
               </Pressable>
 
@@ -187,43 +339,50 @@ export default function PostDetail() {
                   onPress={() => WebBrowser.openBrowserAsync(certUrl)}
                   accessibilityRole="button"
                   accessibilityLabel="Abrir vista web pública"
-                  style={s.webBtn}
+                  style={[s.webBtn, { backgroundColor: subtleBg, borderColor }]}
                 >
-                  <Feather name="external-link" size={16} color={colors.ink} />
+                  <Feather name="external-link" size={16} color={textPrimary} />
                 </Pressable>
               </View>
             </View>
 
-            {/* Franja de metadatos reales del artículo (lectura, fuentes, confianza) */}
-            <View style={s.metricsStrip}>
+            {/* Franja de metadatos adaptativa al tema Light/Dark */}
+            <View style={[s.metricsStrip, { backgroundColor: subtleBg, borderColor }]}>
               <View style={s.metricBox}>
-                <Text variant="caption">Lectura</Text>
-                <Text variant="label">{mins} min</Text>
+                <Text variant="caption" style={{ color: textSecondary }}>Lectura</Text>
+                <Text variant="label" style={{ color: textPrimary }}>{mins} min</Text>
               </View>
-              <View style={s.metricSep} />
+              <View style={[s.metricSep, { backgroundColor: borderColor }]} />
               <View style={s.metricBox}>
-                <Text variant="caption">Fuentes</Text>
-                <Text variant="label">{post.sources.length}</Text>
+                <Text variant="caption" style={{ color: textSecondary }}>Fuentes</Text>
+                <Text variant="label" style={{ color: textPrimary }}>{post.sources.length}</Text>
               </View>
-              <View style={s.metricSep} />
+              <View style={[s.metricSep, { backgroundColor: borderColor }]} />
               <View style={s.metricBox}>
-                <Text variant="caption">Confianza</Text>
-                <Text variant="label" style={{ color: post.isVerified ? colors.success : colors.ink }}>
+                <Text variant="caption" style={{ color: textSecondary }}>Confianza</Text>
+                <Text variant="label" style={{ color: post.isVerified ? themeColors.success : textPrimary }}>
                   {verifiedVerdict ? `${verifiedVerdict.trustScore}/100` : post.isVerified ? 'Verificado' : '–'}
                 </Text>
               </View>
             </View>
 
+            {/* Contenido del post y GIF/Imágenes entre el contenido */}
             <View style={{ gap: space.lg }}>
-              <Text variant="heading" style={{ fontSize: 18, lineHeight: 26 }}>
-                {repostMeta?.cleanSummary ?? post.summary}
-              </Text>
+              {!isSummaryDuplicate && (
+                <Text variant="heading" style={[s.summaryHeading, { color: textPrimary }]}>
+                  {cleanSummary}
+                </Text>
+              )}
               {post.isLocked ? (
                 <PremiumUnlockPanel post={post} />
               ) : (
-                <Text variant="body" style={{ lineHeight: 25 }} selectable>
-                  {post.content}
-                </Text>
+                <PostContentRenderer
+                  content={post.content}
+                  isDark={isDark}
+                  textPrimary={textPrimary}
+                  subtleBg={subtleBg}
+                  borderColor={borderColor}
+                />
               )}
             </View>
 
@@ -235,7 +394,7 @@ export default function PostDetail() {
 
             {post.sources.length > 0 && (
               <Section title={`Fuentes verificables (${post.sources.length})`}>
-                <Card style={{ paddingHorizontal: 0, paddingVertical: space.xs }}>
+                <Card style={{ paddingHorizontal: 0, paddingVertical: space.xs, backgroundColor: subtleBg, borderColor }}>
                   {post.sources.map((src) => (
                     <ListRow
                       key={src.id}
@@ -268,15 +427,19 @@ export default function PostDetail() {
                 {post.verifications
                   .filter((v) => v.verdict === 'VERIFIED')
                   .map((v) => (
-                    <Card key={v.id} style={{ gap: space.sm }}>
-                      <Text variant="label">Confianza: {v.trustScore}/100</Text>
-                      <Text variant="body">{v.notes}</Text>
+                    <Card key={v.id} style={{ gap: space.sm, backgroundColor: subtleBg, borderColor }}>
+                      <Text variant="heading" style={{ color: textPrimary }}>
+                        Veredicto: Verificado por moderador
+                      </Text>
+                      {v.notes && <Text variant="caption" style={{ color: textSecondary }}>{v.notes}</Text>}
                     </Card>
                   ))}
               </Section>
             )}
 
-            {post.status === 'PUBLISHED' && <PostEngagementBar post={post} />}
+            <PostEngagementBar post={post} />
+
+            <CommentsSection post={post} />
           </Sheet>
         </ScrollView>
 
@@ -285,7 +448,11 @@ export default function PostDetail() {
           style={[
             s.topHeaderWrap,
             { paddingTop: top },
-            scrolled && s.topHeaderScrolled,
+            scrolled && {
+              backgroundColor: screenBg,
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: borderColor,
+            },
           ]}
         >
           <NavHeader
@@ -321,11 +488,7 @@ const s = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-  },
-  topHeaderScrolled: {
-    backgroundColor: colors.bg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
+    zIndex: 10,
   },
   authorBar: {
     flexDirection: 'row',
@@ -343,21 +506,17 @@ const s = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
   },
   metricsStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
   },
   metricBox: {
     flex: 1,
@@ -367,6 +526,78 @@ const s = StyleSheet.create({
   metricSep: {
     width: 1,
     height: 28,
-    backgroundColor: colors.line,
+  },
+  inlineMediaCard: {
+    width: '100%',
+    height: 240,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    marginVertical: 6,
+    borderWidth: 1,
+    position: 'relative',
+  },
+  inlineMediaImg: {
+    width: '100%',
+    height: '100%',
+  },
+  inlineGifBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  inlineGifBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontFamily: fonts.bold,
+  },
+  inlineLocationTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    marginVertical: 4,
+  },
+  inlineLocationText: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+  },
+  inlineSpaceCard: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: 12,
+    marginVertical: 6,
+    gap: 4,
+  },
+  inlineSpaceTagText: {
+    color: '#7856FF',
+    fontSize: 11,
+    fontFamily: fonts.bold,
+  },
+  inlineSpaceTitle: {
+    fontSize: 15,
+    fontFamily: fonts.bold,
+  },
+  inlinePollCard: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: 10,
+    marginVertical: 4,
+  },
+  bodyText: {
+    fontSize: 16,
+    lineHeight: 26,
+    fontFamily: fonts.regular,
+  },
+  summaryHeading: {
+    fontSize: 18,
+    lineHeight: 26,
+    fontFamily: fonts.medium,
   },
 });
