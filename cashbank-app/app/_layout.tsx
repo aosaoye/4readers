@@ -1,4 +1,12 @@
-import { Inter_300Light, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
+import {
+  Inter_300Light,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  useFonts,
+} from '@expo-google-fonts/inter';
+import { ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -13,12 +21,17 @@ SplashScreen.preventAutoHideAsync();
 
 function RootNavigation() {
   const { authenticated } = useSession();
-  const { isDark, colors } = useTheme();
+  const { isDark, colors, navigationTheme } = useTheme();
 
   return (
-    <>
+    <NavigationThemeProvider value={navigationTheme}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
         <Stack.Protected guard={authenticated}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="post/[id]" />
@@ -55,16 +68,29 @@ function RootNavigation() {
         </Stack.Protected>
       </Stack>
       <Toaster />
-    </>
+    </NavigationThemeProvider>
   );
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({ Inter_300Light, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+  const [fontsLoaded] = useFonts({
+    Inter_300Light,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+  });
   const { ready } = useSession();
 
-  useEffect(() => { session.hydrate(); }, []);
-  useEffect(() => { if (fontsLoaded && ready) SplashScreen.hideAsync(); }, [fontsLoaded, ready]);
+  useEffect(() => {
+    session.hydrate();
+  }, []);
+
+  useEffect(() => {
+    if (fontsLoaded && ready) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, ready]);
 
   if (!fontsLoaded || !ready) return null;
 

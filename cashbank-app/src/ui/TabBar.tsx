@@ -1,12 +1,17 @@
+// src/ui/TabBar.tsx
 import { Feather } from '@expo/vector-icons';
 import { router, type Tabs } from 'expo-router';
-import type { ComponentProps } from 'react';
+import React, { ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
 import { fonts, useTheme } from './theme';
 
-type BottomTabBarProps = NonNullable<ComponentProps<typeof Tabs>['tabBar']> extends (props: infer P) => any ? P : never;
+type BottomTabBarProps = NonNullable<ComponentProps<typeof Tabs>['tabBar']> extends (
+  props: infer P
+) => any
+  ? P
+  : never;
 
 const TABS: Record<string, { label: string; icon: keyof typeof Feather.glyphMap }> = {
   index: { label: 'Inicio', icon: 'home' },
@@ -15,15 +20,15 @@ const TABS: Record<string, { label: string; icon: keyof typeof Feather.glyphMap 
   profile: { label: 'Perfil', icon: 'user' },
 };
 
-/** Barra inferior con el mismo fondo que la pantalla y dinámicamente adaptada a Light y Dark mode. */
+/** Barra inferior adaptada de forma 100% reactiva a Light y Dark mode. */
 export function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
   const { bottom } = useSafeAreaInsets();
-  const { isDark, colors: themeColors } = useTheme();
+  const { isDark, colors } = useTheme();
 
-  const barBg = isDark ? '#000000' : '#FFFFFF';
-  const barBorder = isDark ? '#2F3336' : '#EFF3F4';
-  const inactiveColor = isDark ? '#71767B' : '#536471';
-  const activeColor = themeColors.accent || '#E4531D';
+  const barBg = isDark ? colors.background : colors.surface;
+  const barBorder = colors.border;
+  const inactiveColor = colors.textMuted;
+  const activeColor = colors.accent || '#E4531D';
 
   return (
     <View
@@ -49,7 +54,11 @@ export function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
             accessibilityLabel={tab.label}
             style={s.item}
             onPress={() => {
-              const e = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+              const e = emitter.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
               if (!focused && !e.defaultPrevented) {
                 if (navigateToTab) navigateToTab(route.key);
                 else router.navigate(route.name === 'index' ? '/' : (`/${route.name}` as never));

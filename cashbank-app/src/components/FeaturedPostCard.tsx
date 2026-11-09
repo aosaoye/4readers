@@ -1,11 +1,11 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import type { Post } from '@/api/types';
 import { formatRelativeDate } from '@/lib/format';
 import { parseRepost } from '@/lib/reposts';
-import { Avatar, Badge, colors, Cover, fonts, gutter, radius, space, Text, useTheme } from '@/ui';
+import { Avatar, Badge, Cover, fonts, gutter, radius, space, Text, useTheme } from '@/ui';
 import { PostEngagementBar } from './post';
 
 type Props = {
@@ -17,9 +17,10 @@ const SCREEN_W = Dimensions.get('window').width;
 const GAP = 14;
 
 function HeroCardItem({ item, width }: { item: Post; width: number }) {
-  const { isDark, colors: themeColors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const repostMeta = parseRepost(item);
   const ownerUsername = repostMeta.originalAuthor;
+
   return (
     <Pressable
       onPress={() => router.navigate(`/post/${item.id}`)}
@@ -29,7 +30,7 @@ function HeroCardItem({ item, width }: { item: Post; width: number }) {
         {
           width,
           backgroundColor: themeColors.surface,
-          borderColor: themeColors.line,
+          borderColor: themeColors.border,
         },
         pressed && { opacity: 0.94 },
       ]}
@@ -37,12 +38,16 @@ function HeroCardItem({ item, width }: { item: Post; width: number }) {
       {repostMeta.isRepost && repostMeta.repostedBy && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Feather name="repeat" size={13} color={themeColors.success} />
-          <Text variant="caption" style={{ color: themeColors.success, fontFamily: fonts.semibold }}>
+          <Text
+            variant="caption"
+            style={{ color: themeColors.success, fontFamily: fonts.semibold }}
+          >
             Compartido por @{repostMeta.repostedBy}
           </Text>
         </View>
       )}
-      {/* Cabecera del propietario/autor original + categoría */}
+
+      {/* Cabecera del autor original + categoría */}
       <View style={s.header}>
         <Pressable
           disabled={!ownerUsername}
@@ -52,14 +57,28 @@ function HeroCardItem({ item, width }: { item: Post; width: number }) {
           <Avatar name={ownerUsername ?? item.categoryName ?? '?'} size={40} />
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <Text variant="label" numberOfLines={1} style={{ flexShrink: 1 }}>
+              <Text
+                variant="label"
+                numberOfLines={1}
+                style={{ flexShrink: 1, color: themeColors.text }}
+              >
                 {ownerUsername}
               </Text>
               {item.isVerified && (
-                <Feather name="check-circle" size={15} color={themeColors.success} accessibilityLabel="Verificado" />
+                <Feather
+                  name="check-circle"
+                  size={15}
+                  color={themeColors.success}
+                  accessibilityLabel="Verificado"
+                />
               )}
             </View>
-            <Text variant="caption">{formatRelativeDate(item.publishedAt ?? item.createdAt)}</Text>
+            <Text
+              variant="caption"
+              style={{ color: themeColors.textMuted }}
+            >
+              {formatRelativeDate(item.publishedAt ?? item.createdAt)}
+            </Text>
           </View>
         </Pressable>
         {item.categoryName ? <Badge label={item.categoryName} /> : null}
@@ -67,10 +86,18 @@ function HeroCardItem({ item, width }: { item: Post; width: number }) {
 
       {/* Titular y resumen */}
       <View style={{ gap: 6 }}>
-        <Text variant="heading" style={s.title} numberOfLines={2}>
+        <Text
+          variant="heading"
+          style={[s.title, { color: themeColors.text }]}
+          numberOfLines={2}
+        >
           {item.title}
         </Text>
-        <Text variant="body" numberOfLines={2} style={{ fontSize: 14, lineHeight: 20 }}>
+        <Text
+          variant="body"
+          numberOfLines={2}
+          style={{ fontSize: 14, lineHeight: 20, color: themeColors.textSecondary }}
+        >
           {repostMeta.cleanSummary}
         </Text>
       </View>
@@ -137,12 +164,10 @@ const s = StyleSheet.create({
     gap: GAP,
   },
   card: {
-    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: space.lg,
     gap: space.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+    borderWidth: 1,
   },
   header: {
     flexDirection: 'row',

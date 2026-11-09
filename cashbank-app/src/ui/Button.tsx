@@ -1,52 +1,139 @@
+// src/ui/Button.tsx
 import { Feather } from '@expo/vector-icons';
-import { ActivityIndicator, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { colors, radius } from './theme';
+import React from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  PressableProps,
+  StyleProp,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { Text } from './Text';
+import { radius, useTheme } from './theme';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'light';
-type Props = {
-  title: string; onPress?: () => void; variant?: Variant; size?: 'md' | 'sm';
-  loading?: boolean; disabled?: boolean; icon?: keyof typeof Feather.glyphMap; style?: StyleProp<ViewStyle>;
-};
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'light' | 'outline' | 'danger';
 
-export function Button({ title, onPress, variant = 'primary', size = 'md', loading, disabled, icon, style }: Props) {
-  const fg = variant === 'primary' ? colors.onInk : variant === 'ghost' ? colors.accent : colors.ink;
+export interface ButtonProps extends Omit<PressableProps, 'style'> {
+  label?: string;
+  title?: string;
+  variant?: ButtonVariant;
+  size?: 'sm' | 'md' | 'lg' | string;
+  loading?: boolean;
+  disabled?: boolean;
+  icon?: keyof typeof Feather.glyphMap;
+  style?: StyleProp<ViewStyle> | ((state: { pressed: boolean }) => StyleProp<ViewStyle>);
+}
+
+export function Button({
+  label,
+  title,
+  variant = 'primary',
+  size = 'md',
+  loading = false,
+  disabled = false,
+  icon,
+  style,
+  ...props
+}: ButtonProps) {
+  const { colors, spacing } = useTheme();
+  const text = label ?? title ?? '';
+
+  const bgMap: Record<ButtonVariant, string> = {
+    primary: colors.primary,
+    secondary: colors.surfaceSubtle,
+    ghost: 'transparent',
+    light: colors.surface,
+    outline: 'transparent',
+    danger: colors.danger,
+  };
+
+  const textMap: Record<ButtonVariant, string> = {
+    primary: colors.primaryForeground,
+    secondary: colors.text,
+    ghost: colors.primary,
+    light: colors.text,
+    outline: colors.text,
+    danger: '#FFFFFF',
+  };
+
+  const isSmall = size === 'sm';
+  const fgColor = textMap[variant] || colors.text;
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: !!disabled || !!loading, busy: !!loading }}
       disabled={disabled || loading}
-      onPress={onPress}
       style={({ pressed }) => [
-        s.base, size === 'sm' ? s.sm : s.md,
-        variant === 'primary' && s.primary, variant === 'secondary' && s.secondary, variant === 'light' && { backgroundColor: colors.surface },
-        (pressed || disabled) && { opacity: disabled ? 0.45 : 0.75 }, style,
+        s.base,
+        isSmall ? s.sm : s.md,
+        {
+          backgroundColor: bgMap[variant],
+          borderColor: variant === 'outline' || variant === 'secondary' ? colors.border : 'transparent',
+          borderWidth: variant === 'outline' || variant === 'secondary' ? 1 : 0,
+          opacity: disabled ? 0.45 : pressed ? 0.8 : 1,
+        },
+        typeof style === 'function' ? style({ pressed }) : style,
       ]}
+      {...props}
     >
-      {loading ? <ActivityIndicator color={fg} /> : (
+      {loading ? (
+        <ActivityIndicator color={fgColor} />
+      ) : (
         <View style={s.content}>
-          {icon && <Feather name={icon} size={18} color={fg} />}
-          <Text variant="label" style={{ color: fg, fontSize: 15 }}>{title}</Text>
+          {icon && <Feather name={icon} size={isSmall ? 15 : 18} color={fgColor} />}
+          <Text
+            variant="label"
+            style={{
+              color: fgColor,
+              fontSize: isSmall ? 13 : 15,
+              fontWeight: '600',
+            }}
+          >
+            {text}
+          </Text>
         </View>
       )}
     </Pressable>
   );
 }
 
-type IconProps = {
-  name: keyof typeof Feather.glyphMap; onPress?: () => void; label: string;
-  /** "onImage": blanco sobre una portada. "filled": círculo claro. */
-  tone?: 'plain' | 'filled' | 'onImage'; active?: boolean;
-};
-export function IconButton({ name, onPress, label, tone = 'plain', active }: IconProps) {
-  const fg = active ? colors.accent : tone === 'onImage' ? '#fff' : colors.ink;
+export interface IconButtonProps {
+  name: keyof typeof Feather.glyphMap;
+  onPress?: () => void;
+  label: string;
+  tone?: 'plain' | 'filled' | 'onImage';
+  active?: boolean;
+}
+
+export function IconButton({
+  name,
+  onPress,
+  label,
+  tone = 'plain',
+  active,
+}: IconButtonProps) {
+  const { colors } = useTheme();
+  const fg = active ? colors.accent : tone === 'onImage' ? '#FFFFFF' : colors.text;
+
   return (
     <Pressable
-      accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={8}
       style={({ pressed }) => [
         s.icon,
-        tone === 'filled' && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.bg },
-        tone === 'onImage' && { backgroundColor: active ? '#fff' : 'rgba(0,0,0,0.32)' },
+        tone === 'filled' && {
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+        },
+        tone === 'onImage' && {
+          backgroundColor: active ? '#FFFFFF' : 'rgba(0,0,0,0.32)',
+        },
         pressed && { opacity: 0.6 },
       ]}
     >
@@ -56,11 +143,29 @@ export function IconButton({ name, onPress, label, tone = 'plain', active }: Ico
 }
 
 const s = StyleSheet.create({
-  base: { alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
-  md: { height: 52, paddingHorizontal: 24 },
-  sm: { height: 38, paddingHorizontal: 16 },
-  primary: { backgroundColor: colors.ink },
-  secondary: { borderWidth: 1, borderColor: colors.line },
-  content: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  icon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  base: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+  },
+  md: {
+    height: 50,
+    paddingHorizontal: 22,
+  },
+  sm: {
+    height: 36,
+    paddingHorizontal: 14,
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  icon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
