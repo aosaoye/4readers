@@ -93,7 +93,11 @@ export default function SearchScreen() {
         <Pressable
           onPress={() => (router.canGoBack() ? router.back() : router.navigate('/explore'))}
           hitSlop={10}
-          style={({ pressed }) => [s.circleBackBtn, pressed && { opacity: 0.7 }]}
+          style={({ pressed }) => [
+            s.circleBackBtn,
+            { backgroundColor: themeColors.surfaceSubtle },
+            pressed && { opacity: 0.7 },
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Volver"
         >
@@ -125,7 +129,6 @@ export default function SearchScreen() {
           )}
         </View>
       </View>
-      <Divider />
 
       <PostList
         posts={matchingPosts}
@@ -237,7 +240,6 @@ const s = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#1E2328',
     alignItems: 'center',
     justifyContent: 'center',
   },

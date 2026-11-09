@@ -331,35 +331,39 @@ export default function ProfileScreen() {
       {/* 1. VISTA DE BÚSQUEDA DEL PERFIL */}
       {isSearchingInProfile ? (
         <View style={{ flex: 1, backgroundColor: screenBg }}>
-          {/* Header de búsqueda */}
-          <View style={[s.searchProfileHeader, { paddingTop: Math.max(top, space.sm) + 4, borderBottomColor: borderColor, borderBottomWidth: 1 }]}>
+          {/* Header de búsqueda (idéntico a Explorar / Imagen 1) */}
+          <View style={[s.searchProfileHeader, { paddingTop: Math.max(top, space.sm) + 4 }]}>
             <Pressable
               onPress={() => {
                 setIsSearchingInProfile(false);
                 setHasExecutedSearch(false);
               }}
               hitSlop={10}
-              style={({ pressed }) => [s.circleBtn, pressed && { opacity: 0.7 }]}
+              style={({ pressed }) => [
+                s.searchCircleBackBtn,
+                { backgroundColor: themeColors.surfaceSubtle },
+                pressed && { opacity: 0.7 },
+              ]}
               accessibilityRole="button"
               accessibilityLabel="Volver al perfil"
             >
-              <Feather name="arrow-left" size={22} color={textPrimary} />
+              <Feather name="arrow-left" size={20} color={textPrimary} />
             </Pressable>
 
-            {/* Input activo */}
-            <View style={[s.searchProfilePillActive, { backgroundColor: isDark ? '#202327' : '#EFF3F4' }]}>
-              <Feather name="search" size={18} color={textSecondary} />
+            {/* Input activo transparente sin píldora/caja gris (Imagen 1) */}
+            <View style={s.searchInputRow}>
+              <Feather name="search" size={20} color="#71767B" />
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus
                 placeholder="Buscar"
-                placeholderTextColor={textSecondary}
+                placeholderTextColor="#71767B"
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="search"
                 onSubmitEditing={() => setHasExecutedSearch(true)}
-                style={[s.searchProfileInput, { color: textPrimary }]}
+                style={[s.searchInput, { color: textPrimary }]}
               />
               {searchQuery.length > 0 && (
                 <Pressable
@@ -367,12 +371,11 @@ export default function ProfileScreen() {
                     setSearchQuery('');
                     setHasExecutedSearch(false);
                   }}
-                  hitSlop={8}
-                  style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                  hitSlop={10}
                   accessibilityRole="button"
                   accessibilityLabel="Borrar consulta"
                 >
-                  <Feather name="x-circle" size={18} color={textSecondary} />
+                  <Feather name="x-circle" size={18} color="#71767B" />
                 </Pressable>
               )}
             </View>
@@ -1704,27 +1707,32 @@ const s = StyleSheet.create({
     fontFamily: fonts.medium,
     color: '#FFFFFF',
   },
-  // Búsqueda desde Perfil (Imagen 1)
+  // Búsqueda desde Perfil (idéntico a Imagen 1)
   searchProfileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingBottom: space.sm,
   },
-  searchProfilePillActive: {
+  searchCircleBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchInputRow: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    height: 40,
-    paddingHorizontal: 8,
+    height: 42,
   },
-  searchProfileInput: {
+  searchInput: {
     flex: 1,
     fontSize: 17,
     fontFamily: fonts.regular,
-    color: '#FFFFFF',
     paddingVertical: 0,
   },
   searchSuggestionRow: {
