@@ -206,3 +206,34 @@ Este documento contiene las restricciones y estándares visuales obligatorios de
      3. 🔗 `Copiar enlace` (Copiar URL al portapapeles)
      4. 📤 `Compartir por...` (Lanzar share sheet nativo)
    - Botón píldora inferior «Editar» para volver a modificar los datos si se desea.
+
+
+---
+
+## 16. Pantalla "Editar Espacio", Límites Freemium/Premium, Exclusión de Adjuntos y Teclado Activo
+1. **Sheet "Editar Espacio" desde Confirmación**:
+   - Al pulsar «Editar» en la pantalla de confirmación del Espacio, se abre el modal sheet «Editar Espacio»:
+     - Título centrado `Editar Espacio`.
+     - Campo `Nombre`: Input editable con el nombre del Espacio.
+     - Campo `Hora`: Muestra la hora programada (`Hoy a las 7:00`) y permite reabrir el selector de hora.
+     - Enlace azul `Añadir Temas` para modificar los temas.
+     - Fila `Grabar Espacio` con Switch interactivo.
+     - Texto de recordatorio: `Recibirás un recordatorio para iniciar tu Espacio a la hora programada.`.
+     - Botón píldora morado `Guardar cambios` (guarda modificaciones y regresa a la vista de confirmación).
+     - Botón texto rojo `Cancelar Espacio programado` (anula el espacio programado y limpia el estado).
+2. **Flujo "Postear" y Anuncio con Tarjeta Violeta**:
+   - Al pulsar `Postear` en la confirmación del Espacio, se abre el compositor de publicaciones con:
+     - Texto prellenado: `Definir un recordatorio para mi próximo Espacio.\nhttps://x.com/i/spaces/1broAmaIEnPMBL`.
+     - Tarjeta violeta de Espacio adjunta (`Tu Espacio`, anfitrión, fecha `Hoy a las 7:00 a. m.` y botón circular `✕` para desvincular).
+3. **Medidor Circular de Publicación (Freemium vs Premium)**:
+   - Indicador circular en la barra de herramientas que mide la longitud del post:
+     - Plan Freemium: 280 caracteres máximo.
+     - Plan Premium / Verificado: 4000 caracteres máximo.
+   - Pista gris `#38444D` con arco dinámico azul `#1D9BF0` que se llena proporcionalmente.
+   - A falta de 20 caracteres o menos, muestra la cuenta regresiva numérica en naranja/amarillo (`#FFAD1F`), y rojo (`#F4212E`) si se alcanza el límite.
+4. **Regla de Exclusión Mutua de Adjuntos**:
+   - Si la publicación tiene un Espacio adjunto o se llena el límite de caracteres:
+     - **PROHIBIDO** añadir imágenes, cámara, otro espacio, GIFs o listas/encuestas (los iconos se deshabilitan en color `#536471` con opacidad reducida).
+     - **SOLO** se permite editar texto y adjuntar ubicación (`map-pin` activo en azul `#1D9BF0`).
+5. **Barra de Herramientas Flotante sobre el Teclado**:
+   - Cuando el teclado nativo está activo, la barra de herramientas (`toolbarContainer`) y el selector de audiencia se anclan **inmediatamente encima del teclado**, sin ocultarse ni quedar tapados bajo las teclas, asegurando accesibilidad continua a los controles.

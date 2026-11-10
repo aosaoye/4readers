@@ -22,6 +22,7 @@ export interface SpaceConfig {
   scheduledAt?: string;
   isLive?: boolean;
   shouldPostAnnouncement?: boolean;
+  spaceUrl?: string;
 }
 
 interface SpacesModalProps {
@@ -96,6 +97,10 @@ export function SpacesModal({ visible, onClose, onConfirm }: SpacesModalProps) {
   const [recordSpace, setRecordSpace] = useState(true);
   const [showTopicsSheet, setShowTopicsSheet] = useState(false);
 
+  // Sheet de "Editar Espacio" (Imagen 1 del usuario)
+  const [showEditSheet, setShowEditSheet] = useState(false);
+  const [editTitleInput, setEditTitleInput] = useState('');
+
   // DatePicker states (con año calculado automáticamente del año actual)
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [selectedDay, setSelectedDay] = useState(10);
@@ -103,6 +108,11 @@ export function SpacesModal({ visible, onClose, onConfirm }: SpacesModalProps) {
   const [selectedHour, setSelectedHour] = useState(7);
   const [selectedMinute, setSelectedMinute] = useState('00');
   const [selectedAmPm, setSelectedAmPm] = useState<'a. m.' | 'p. m.'>('a. m.');
+
+  // Sincronizar input de edición al cambiar el título principal
+  useEffect(() => {
+    setEditTitleInput(topicInput);
+  }, [topicInput]);
 
   // Verificar si ya se mostró la pantalla de intro ("Graba tu Espacio", Imagen 2)
   useEffect(() => {
@@ -177,25 +187,48 @@ export function SpacesModal({ visible, onClose, onConfirm }: SpacesModalProps) {
     return `Hoy a las ${selectedHour}:${selectedMinute}`;
   }, [selectedHour, selectedMinute]);
 
+  const scheduledFullLabel = useMemo(() => {
+    return `Hoy a las ${selectedHour}:${selectedMinute} ${selectedAmPm}`;
+  }, [selectedHour, selectedMinute, selectedAmPm]);
+
+  // Al pulsar "Postear" en confirmación -> Llena el post como en Imagen 2 y 4
   const handleFinishAndPost = () => {
     const title = topicInput.trim() || 'Tu Espacio';
+    const spaceUrl = 'https://x.com/i/spaces/1broAmaIEnPMBL';
     onConfirm({
       title,
       topics: selectedTopics,
       record: recordSpace,
-      scheduledAt: scheduledDateLabel,
+      scheduledAt: scheduledFullLabel,
       isLive: false,
       shouldPostAnnouncement: true,
+      spaceUrl,
     });
     toast.success('¡Espacio programado! Añadido a tu publicación');
     onClose();
+  };
+
+  // Guardar cambios desde "Editar Espacio" (Imagen 1)
+  const handleSaveEditChanges = () => {
+    setTopicInput(editTitleInput);
+    setShowEditSheet(false);
+    toast.success('Cambios del Espacio guardados');
+  };
+
+  // Cancelar Espacio programado desde "Editar Espacio" (Imagen 1)
+  const handleCancelScheduledSpace = () => {
+    setShowEditSheet(false);
+    setTopicInput('');
+    setSelectedTopics([]);
+    setStep('create');
+    toast.info('Espacio programado cancelado');
   };
 
   const handleShareLink = async () => {
     const title = topicInput.trim() || 'Tu Espacio';
     try {
       await Share.share({
-        message: `¡Únete a mi Espacio en 4readers: "${title}" programado para el ${scheduledDateLabel}! 🎙️✨ https://cashbank.app/spaces`,
+        message: `¡Únete a mi Espacio en 4readers: "${title}" programado para el ${scheduledDateLabel}! 🎙️✨ https://x.com/i/spaces/1broAmaIEnPMBL`,
       });
     } catch {
       // Compartir cancelado
@@ -588,7 +621,7 @@ export function SpacesModal({ visible, onClose, onConfirm }: SpacesModalProps) {
         )}
 
         {/* =========================================================================
-            4. PANTALLA DE ÉXITO Y CONFIRMACIÓN PROGRAMADA (Imagen 5)
+            4. PANTALLA DE ÉXITO Y CONFIRMACIÓN PROGRAMADA (Imagen 5 / Fondo de Imagen 1)
            ========================================================================= */}
         {step === 'scheduled_success' && (
           <View style={s.successContainer}>
@@ -616,7 +649,7 @@ export function SpacesModal({ visible, onClose, onConfirm }: SpacesModalProps) {
                 Tu Espacio está programado.{'\n'}¡Ahora anúncialo!
               </Text>
 
-              {/* Tarjeta violeta de previsualización del Espacio (Imagen 5) */}
+              {/* Tarjeta violeta de previsualización del Espacio (Imagen 5 y Fondo de Imagen 1) */}
               <View style={s.purpleCard}>
                 <View style={s.hostRow}>
                   <View style={s.hostAvatarWrap}>
@@ -646,7 +679,7 @@ export function SpacesModal({ visible, onClose, onConfirm }: SpacesModalProps) {
 
               {/* 4 Botones circulares de acciones rápidas (Imagen 5) */}
               <View style={s.quickActionsRow}>
-                {/* 1. Postear */}
+                {/* 1. Postear (Abre la composición de post como en Imagen 2 y 4) */}
                 <Pressable
                   onPress={handleFinishAndPost}
                   style={({ pressed }) => [s.actionItem, pressed && { opacity: 0.75 }]}
@@ -692,10 +725,13 @@ export function SpacesModal({ visible, onClose, onConfirm }: SpacesModalProps) {
               </View>
             </ScrollView>
 
-            {/* Botón inferior "Editar" (Imagen 5) */}
+            {/* Botón inferior "Editar" -> Abre "Editar Espacio" (Imagen 1) */}
             <View style={s.successBottomBar}>
               <Pressable
-                onPress={() => setStep('schedule')}
+                onPress={() => {
+                  setEditTitleInput(topicInput);
+                  setShowEditSheet(true);
+                }}
                 style={({ pressed }) => [
                   s.editOutlineBtn,
                   {
@@ -795,6 +831,94 @@ export function SpacesModal({ visible, onClose, onConfirm }: SpacesModalProps) {
                   </Text>
                 </Pressable>
               </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        {/* =========================================================================
+            6. MODAL BOTTOM SHEET "EDITAR ESPACIO" (Imagen 1 del usuario)
+           ========================================================================= */}
+        <Modal
+          visible={showEditSheet}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowEditSheet(false)}
+        >
+          <Pressable style={s.topicsOverlay} onPress={() => setShowEditSheet(false)}>
+            <Pressable
+              style={[s.editSheet, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View style={s.sheetHandle} />
+
+              <Text style={[s.editTitle, { color: textPrimary }]}>Editar Espacio</Text>
+
+              {/* Sección Nombre */}
+              <View style={s.editFieldSection}>
+                <Text style={[s.editFieldLabel, { color: textPrimary }]}>Nombre</Text>
+                <TextInput
+                  value={editTitleInput}
+                  onChangeText={setEditTitleInput}
+                  placeholder="¿De qué quieres hablar?"
+                  placeholderTextColor={textSecondary}
+                  style={[s.editFieldInput, { color: textPrimary }]}
+                />
+              </View>
+
+              {/* Sección Hora */}
+              <View style={s.editFieldSection}>
+                <Text style={[s.editFieldLabel, { color: textPrimary }]}>Hora</Text>
+                <Pressable
+                  onPress={() => {
+                    setShowEditSheet(false);
+                    setStep('schedule');
+                  }}
+                  style={s.editTimeTouchable}
+                >
+                  <Text style={[s.editTimeValue, { color: textSecondary }]}>
+                    {scheduledShortLabel}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* Enlace Añadir Temas */}
+              <Pressable
+                onPress={() => setShowTopicsSheet(true)}
+                style={({ pressed }) => [s.editAddTopicsBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={s.editAddTopicsText}>Añadir Temas</Text>
+              </Pressable>
+
+              {/* Fila Switch Grabar Espacio */}
+              <View style={s.editRecordRow}>
+                <Text style={[s.editRecordLabel, { color: textPrimary }]}>Grabar Espacio</Text>
+                <CustomSwitch
+                  value={recordSpace}
+                  onValueChange={setRecordSpace}
+                  activeColor="#1D9BF0"
+                />
+              </View>
+
+              {/* Nota recordatorio */}
+              <Text style={s.editReminderNote}>
+                Recibirás un recordatorio para iniciar tu Espacio a la hora programada.
+              </Text>
+
+              {/* Botón Guardar cambios */}
+              <Pressable
+                onPress={handleSaveEditChanges}
+                style={({ pressed }) => [s.saveEditBtn, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={s.saveEditText}>Guardar cambios</Text>
+              </Pressable>
+
+              {/* Botón Cancelar Espacio programado */}
+              <Pressable
+                onPress={handleCancelScheduledSpace}
+                style={({ pressed }) => [s.cancelScheduledBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={s.cancelScheduledText}>Cancelar Espacio programado</Text>
+              </Pressable>
             </Pressable>
           </Pressable>
         </Modal>
@@ -1295,6 +1419,89 @@ const s = StyleSheet.create({
   },
   saveTopicsText: {
     fontSize: 16,
+    fontFamily: fonts.bold,
+  },
+  editSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 28,
+  },
+  editTitle: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  editFieldSection: {
+    marginBottom: 18,
+  },
+  editFieldLabel: {
+    fontSize: 16,
+    fontFamily: fonts.bold,
+    marginBottom: 6,
+  },
+  editFieldInput: {
+    fontSize: 16,
+    fontFamily: fonts.regular,
+    paddingVertical: 2,
+  },
+  editTimeTouchable: {
+    paddingVertical: 2,
+  },
+  editTimeValue: {
+    fontSize: 16,
+    fontFamily: fonts.regular,
+  },
+  editAddTopicsBtn: {
+    marginBottom: 18,
+  },
+  editAddTopicsText: {
+    fontSize: 16,
+    color: '#1D9BF0',
+    fontFamily: fonts.medium,
+  },
+  editRecordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  editRecordLabel: {
+    fontSize: 16,
+    fontFamily: fonts.bold,
+  },
+  editReminderNote: {
+    fontSize: 14,
+    color: '#71767B',
+    lineHeight: 20,
+    fontFamily: fonts.regular,
+    marginBottom: 22,
+  },
+  saveEditBtn: {
+    width: '100%',
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#7C5CFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  saveEditText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: fonts.bold,
+  },
+  cancelScheduledBtn: {
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelScheduledText: {
+    color: '#F4212E',
+    fontSize: 15,
     fontFamily: fonts.bold,
   },
 });

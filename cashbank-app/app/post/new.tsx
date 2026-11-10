@@ -1,10 +1,11 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -31,7 +32,6 @@ import {
   fonts,
   gutter,
   radius,
-  Screen,
   space,
   Text,
   toast,
@@ -48,12 +48,80 @@ interface ThreadPost {
   spaceConfig?: SpaceConfig | null;
 }
 
+/**
+ * Indicador circular de progreso de caracteres estilo X (Imagen 3 del usuario).
+ * Llena el arco azul proporcionalmente y se vuelve naranja/rojo al aproximarse al límite.
+ */
+function CircularProgressMeter({
+  progress,
+  charsLeft,
+}: {
+  progress: number;
+  charsLeft: number;
+}) {
+  const size = 24;
+  const strokeWidth = 2.5;
+  const isNearLimit = charsLeft <= 20;
+  const isOver = charsLeft < 0;
+  const strokeColor = isOver ? '#F4212E' : isNearLimit ? '#FFAD1F' : '#1D9BF0';
+
+  const clamped = Math.min(1, Math.max(0, progress));
+  const deg = Math.round(clamped * 360);
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Pista circular gris de fondo */}
+      <View
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: strokeWidth,
+          borderColor: '#38444D',
+          position: 'absolute',
+        }}
+      />
+      {/* Arco de progreso dinámico proporcional */}
+      {clamped > 0 && (
+        <View
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            borderWidth: strokeWidth,
+            borderColor: 'transparent',
+            borderTopColor: strokeColor,
+            borderRightColor: clamped >= 0.25 ? strokeColor : 'transparent',
+            borderBottomColor: clamped >= 0.5 ? strokeColor : 'transparent',
+            borderLeftColor: clamped >= 0.75 ? strokeColor : 'transparent',
+            position: 'absolute',
+            transform: [{ rotate: `${deg}deg` }],
+          }}
+        />
+      )}
+      {/* Cuenta regresiva cuando quedan 20 caracteres o menos */}
+      {isNearLimit && (
+        <Text
+          style={{
+            fontSize: 9,
+            fontFamily: fonts.bold,
+            color: strokeColor,
+            textAlign: 'center',
+          }}
+        >
+          {charsLeft}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 export default function NewPostScreen() {
   const { edit } = useLocalSearchParams<{ edit?: string }>();
   const editing = !!edit;
   const existing = usePost(edit ?? '', editing);
 
-  const { isDark, colors } = useTheme();
+  const { isDark } = useTheme();
   const { top, bottom } = useSafeAreaInsets();
   const me = useMe().data;
   const categoriesQuery = useCategories();
@@ -61,6 +129,24 @@ export default function NewPostScreen() {
 
   const createPost = useCreatePost();
   const updatePost = useUpdatePost(edit ?? '');
+
+  // Detectar teclado activo para que la barra de herramientas flote exactamente arriba (Imagen 4)
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Estado del hilo de posts (conectar varios posts)
   const [posts, setPosts] = useState<ThreadPost[]>([
@@ -162,10 +248,10 @@ export default function NewPostScreen() {
           ...p,
           images: [...p.images, uri].slice(0, 4),
         }));
-        toast.success('Foto capturada');
+        toast.success('Foto tomada');
       }
     } catch {
-      toast.error('Error al capturar foto');
+      toast.error('Error al abrir la cámara');
     }
   };
 
@@ -182,11 +268,29 @@ export default function NewPostScreen() {
     }));
   };
 
+  // Límite dinámico según suscripción Premium o Freemium (Imagen 3 del usuario)
+  const isPremium = Boolean(me?.isVerified);
+  const maxChars = isPremium ? 4000 : 280;
+
+  const currentActivePost = posts[focusedIndex] || posts[0];
+  const totalCharsInActive = currentActivePost?.text.length ?? 0;
+  const charsLeft = maxChars - totalCharsInActive;
+  const progress = Math.min(1, Math.max(0, totalCharsInActive / maxChars));
+  const isFull = totalCharsInActive >= maxChars;
+
+  // Restricciones de adjuntos según Imagen 4:
+  // Si hay un Espacio o el texto se llena al 100%:
+  // NO se pueden añadir imágenes, cámara, otro espacio, GIF ni listas. Solo texto y ubicación.
+  const hasSpace = Boolean(currentActivePost?.spaceConfig);
+  const hasMedia = (currentActivePost?.images?.length ?? 0) > 0 || Boolean(currentActivePost?.gifUrl);
+  const hasPoll = Boolean(currentActivePost?.poll);
+
+  const isMediaDisabled = hasSpace || isFull;
+  const isSpaceDisabled = hasSpace || hasMedia || hasPoll || isFull;
+
   // Publicar post(s)
   const isSubmitting = createPost.isPending || updatePost.isPending;
 
-  const totalCharsInActive = posts[focusedIndex]?.text.length ?? 0;
-  const maxChars = 280;
   const hasContent = posts.some(
     (p) =>
       p.text.trim().length > 0 ||
@@ -202,7 +306,6 @@ export default function NewPostScreen() {
       return;
     }
 
-    // Default category fallback
     const catId =
       selectedCategoryId ||
       categories[0]?.id ||
@@ -305,12 +408,12 @@ export default function NewPostScreen() {
   }, [audience]);
 
   return (
-    <Screen edges={['top', 'bottom']} style={{ backgroundColor: screenBg }}>
+    <View style={[{ flex: 1, backgroundColor: screenBg, paddingTop: Math.max(top, 10) }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        {/* Cabecera estilo X (Imagen 1): [X] a la izquierda, [Publicar] azul redondeado a la derecha */}
+        {/* Cabecera estilo X: [X] a la izquierda, [Publicar] azul redondeado a la derecha */}
         <View style={s.topHeader}>
           <Pressable
             onPress={() => router.back()}
@@ -323,7 +426,6 @@ export default function NewPostScreen() {
           </Pressable>
 
           <View style={s.headerRightSide}>
-            {/* Pill Publicar */}
             <Pressable
               onPress={handlePublish}
               disabled={!hasContent || isSubmitting}
@@ -356,7 +458,6 @@ export default function NewPostScreen() {
         >
           {posts.map((postItem, idx) => {
             const isLast = idx === posts.length - 1;
-            const isItemFocused = focusedIndex === idx;
 
             return (
               <View key={postItem.id} style={s.postRowWrapper}>
@@ -387,7 +488,7 @@ export default function NewPostScreen() {
                     </View>
                   )}
 
-                  {/* TextInput principal: ¿Qué está pasando? (Imagen 1) */}
+                  {/* TextInput principal: ¿Qué está pasando? (Imagen 2 y 4) */}
                   <TextInput
                     value={postItem.text}
                     onChangeText={(t) =>
@@ -396,10 +497,52 @@ export default function NewPostScreen() {
                     onFocus={() => setFocusedIndex(idx)}
                     autoFocus={idx === 0}
                     multiline
+                    maxLength={maxChars}
                     placeholder={idx === 0 ? '¿Qué está pasando?' : 'Añade otro post...'}
                     placeholderTextColor={textSecondary}
                     style={[s.mainTextInput, { color: textPrimary }]}
                   />
+
+                  {/* Tarjeta violeta de Espacio de Audio (Imagen 4) */}
+                  {postItem.spaceConfig && (
+                    <View style={s.purpleSpaceCard}>
+                      <View style={s.spaceHostRow}>
+                        <View style={s.spaceHostAvatarWrap}>
+                          {me?.avatarUrl ? (
+                            <Image source={{ uri: me.avatarUrl }} style={s.spaceHostAvatarImg} />
+                          ) : (
+                            <Feather name="user" size={13} color="#FFFFFF" />
+                          )}
+                        </View>
+                        <Text style={s.spaceHostNameText} numberOfLines={1}>
+                          {me?.username || 'John Ripper'}
+                        </Text>
+                        <View style={s.spaceHostBadge}>
+                          <Text style={s.spaceHostBadgeText}>Anfitrión</Text>
+                        </View>
+                        <View style={{ flex: 1 }} />
+                        <Pressable
+                          onPress={() => updateActivePost((p) => ({ ...p, spaceConfig: null }))}
+                          hitSlop={8}
+                          style={s.removeSpaceBtn}
+                          accessibilityLabel="Quitar Espacio"
+                        >
+                          <Feather name="x" size={14} color="#FFFFFF" />
+                        </Pressable>
+                      </View>
+
+                      <Text style={s.purpleSpaceTitle}>
+                        {postItem.spaceConfig.title || 'Tu Espacio'}
+                      </Text>
+
+                      <View style={s.spaceTimeRow}>
+                        <Feather name="calendar" size={14} color="#FFFFFF" />
+                        <Text style={s.spaceTimeText}>
+                          {postItem.spaceConfig.scheduledAt || 'Hoy a las 7:00 a. m.'}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
 
                   {/* Previsualización de imágenes adjuntas (1 a 4) */}
                   {postItem.images.length > 0 && (
@@ -466,57 +609,6 @@ export default function NewPostScreen() {
                     </View>
                   )}
 
-                  {/* Previsualización de Espacio de Audio (Imágenes 3, 4, 5) */}
-                  {postItem.spaceConfig && (
-                    <View style={s.spaceCard}>
-                      <View style={s.spaceCardTop}>
-                        <View style={s.spaceStatusBadge}>
-                          <View
-                            style={[
-                              s.spaceStatusDot,
-                              { backgroundColor: postItem.spaceConfig.isLive ? '#F4212E' : '#7856FF' },
-                            ]}
-                          />
-                          <Text style={s.spaceStatusText}>
-                            {postItem.spaceConfig.isLive ? 'ESPACIO EN DIRECTO' : 'ESPACIO PROGRAMADO'}
-                          </Text>
-                        </View>
-                        <Pressable
-                          onPress={() => updateActivePost((p) => ({ ...p, spaceConfig: null }))}
-                          hitSlop={6}
-                        >
-                          <Feather name="x" size={16} color="#71767B" />
-                        </Pressable>
-                      </View>
-
-                      <Text style={[s.spaceCardTitle, { color: textPrimary }]}>
-                        {postItem.spaceConfig.title}
-                      </Text>
-
-                      {postItem.spaceConfig.scheduledAt && (
-                        <View style={s.spaceScheduleRow}>
-                          <Feather name="clock" size={13} color="#7856FF" />
-                          <Text style={s.spaceScheduleText}>
-                            {postItem.spaceConfig.scheduledAt}
-                          </Text>
-                        </View>
-                      )}
-
-                      <View style={s.spaceTagsRow}>
-                        {postItem.spaceConfig.topics.map((t) => (
-                          <View key={t} style={s.spaceTag}>
-                            <Text style={s.spaceTagText}>#{t}</Text>
-                          </View>
-                        ))}
-                        {postItem.spaceConfig.record && (
-                          <View style={[s.spaceTag, { backgroundColor: '#351F5F' }]}>
-                            <Text style={[s.spaceTagText, { color: '#E1E8ED' }]}>🔴 Grabación activada</Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  )}
-
                   {/* Editor de Encuesta (Imagen 2) */}
                   {postItem.poll && (
                     <PollEditor
@@ -530,155 +622,163 @@ export default function NewPostScreen() {
           })}
         </ScrollView>
 
-        {/* Selector de audiencia: "Cualquier persona puede responder" (Imagen 1) */}
-        <View style={s.audienceRow}>
-          <Pressable
-            onPress={() => setShowAudienceModal(true)}
-            style={({ pressed }) => [s.audienceBtn, pressed && { opacity: 0.7 }]}
-          >
-            <Feather name={audienceInfo.icon} size={15} color="#1D9BF0" />
-            <Text style={s.audienceText}>{audienceInfo.label}</Text>
-          </Pressable>
-        </View>
-
-        {/* Barra inferior de herramientas (Imagen 1) */}
-        <View style={[s.toolbarContainer, { borderTopColor: lineCol }]}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.toolbarScroll}
-          >
-            {/* 1. Añadir imágenes desde Galería */}
+        {/* Contenedor inferior de herramientas: Fijado firmemente sobre el teclado (Imagen 4) */}
+        <View style={{ paddingBottom: isKeyboardVisible ? 0 : Math.max(bottom, 8) }}>
+          {/* Selector de audiencia: "Cualquier persona puede responder" (Imagen 2 y 4) */}
+          <View style={s.audienceRow}>
             <Pressable
-              onPress={handlePickImages}
-              hitSlop={8}
-              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Añadir imágenes"
+              onPress={() => setShowAudienceModal(true)}
+              style={({ pressed }) => [s.audienceBtn, pressed && { opacity: 0.7 }]}
             >
-              <Feather name="image" size={21} color="#1D9BF0" />
+              <Feather name={audienceInfo.icon} size={15} color="#1D9BF0" />
+              <Text style={s.audienceText}>{audienceInfo.label}</Text>
             </Pressable>
+          </View>
 
-            {/* 2. Capturar con Cámara */}
-            <Pressable
-              onPress={handleTakePhoto}
-              hitSlop={8}
-              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Capturar con la cámara"
+          {/* Barra inferior de herramientas (Imagen 4) */}
+          <View style={[s.toolbarContainer, { borderTopColor: lineCol }]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.toolbarScroll}
             >
-              <Feather name="camera" size={21} color="#1D9BF0" />
-            </Pressable>
-
-            {/* 3. Voces / Espacio de audio (Imágenes 3, 4, 5) */}
-            <Pressable
-              onPress={() => setShowSpacesModal(true)}
-              hitSlop={8}
-              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Crear un Espacio de voz"
-            >
-              <View style={s.liveIconWrap}>
-                <Feather name="radio" size={21} color="#1D9BF0" />
-              </View>
-            </Pressable>
-
-            {/* 4. GIFs */}
-            <Pressable
-              onPress={() => setShowGifModal(true)}
-              hitSlop={8}
-              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Añadir GIF"
-            >
-              <View style={s.gifPill}>
-                <Text style={s.gifPillText}>GIF</Text>
-              </View>
-            </Pressable>
-
-            {/* 5. Listas / Encuestas (Imagen 2) */}
-            <Pressable
-              onPress={handleTogglePoll}
-              hitSlop={8}
-              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Añadir encuesta"
-            >
-              <Feather name="bar-chart-2" size={21} color="#1D9BF0" />
-            </Pressable>
-
-            {/* 6. Insertar ubicaciones */}
-            <Pressable
-              onPress={() => setShowLocationModal(true)}
-              hitSlop={8}
-              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Insertar ubicación"
-            >
-              <Feather name="map-pin" size={21} color="#1D9BF0" />
-            </Pressable>
-
-            {/* 7. Categoría de publicación */}
-            {categories.length > 0 && (
+              {/* 1. Galería de imágenes (Deshabilitada si hay Espacio o texto lleno, Imagen 4) */}
               <Pressable
-                onPress={() => {
-                  const curIdx = categories.findIndex((c) => c.id === selectedCategoryId);
-                  const nextCat = categories[(curIdx + 1) % categories.length];
-                  setSelectedCategoryId(nextCat.id);
-                  toast.info(`Categoría: ${nextCat.name}`);
-                }}
+                onPress={isMediaDisabled ? undefined : handlePickImages}
+                disabled={isMediaDisabled}
                 hitSlop={8}
                 style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
                 accessibilityRole="button"
-                accessibilityLabel="Elegir categoría"
+                accessibilityLabel="Añadir imágenes"
               >
-                <Feather name="tag" size={20} color="#1D9BF0" />
+                <Feather
+                  name="image"
+                  size={21}
+                  color={isMediaDisabled ? '#536471' : '#1D9BF0'}
+                />
               </Pressable>
-            )}
-          </ScrollView>
 
-          {/* Lado derecho de la barra: Contador circular y Conectar posts (+) */}
-          <View style={s.toolbarRightSide}>
-            {/* Indicador circular de caracteres */}
-            <View style={s.circleProgressWrap}>
-              <View
-                style={[
-                  s.miniCircle,
-                  {
-                    borderColor:
-                      totalCharsInActive > maxChars
-                        ? '#F4212E'
-                        : totalCharsInActive > maxChars - 20
-                          ? '#FFD400'
-                          : '#1D9BF0',
-                  },
-                ]}
+              {/* 2. Capturar con Cámara (Deshabilitada si hay Espacio, Imagen 4) */}
+              <Pressable
+                onPress={isMediaDisabled ? undefined : handleTakePhoto}
+                disabled={isMediaDisabled}
+                hitSlop={8}
+                style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Capturar con la cámara"
               >
-                {totalCharsInActive > maxChars - 20 && (
-                  <Text
-                    style={[
-                      s.circleCharsText,
-                      { color: totalCharsInActive > maxChars ? '#F4212E' : textSecondary },
-                    ]}
-                  >
-                    {maxChars - totalCharsInActive}
-                  </Text>
-                )}
-              </View>
+                <Feather
+                  name="camera"
+                  size={21}
+                  color={isMediaDisabled ? '#536471' : '#1D9BF0'}
+                />
+              </Pressable>
+
+              {/* 3. Voces / Espacio de audio (Deshabilitado si ya hay espacio o media, Imagen 4) */}
+              <Pressable
+                onPress={isSpaceDisabled ? undefined : () => setShowSpacesModal(true)}
+                disabled={isSpaceDisabled}
+                hitSlop={8}
+                style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Crear un Espacio de voz"
+              >
+                <View style={s.liveIconWrap}>
+                  <MaterialCommunityIcons
+                    name="broadcast"
+                    size={21}
+                    color={isSpaceDisabled ? '#536471' : '#1D9BF0'}
+                  />
+                </View>
+              </Pressable>
+
+              {/* 4. GIFs (Deshabilitado si hay Espacio, Imagen 4) */}
+              <Pressable
+                onPress={isMediaDisabled ? undefined : () => setShowGifModal(true)}
+                disabled={isMediaDisabled}
+                hitSlop={8}
+                style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Añadir GIF"
+              >
+                <View style={[s.gifPill, isMediaDisabled && { borderColor: '#536471' }]}>
+                  <Text style={[s.gifPillText, isMediaDisabled && { color: '#536471' }]}>GIF</Text>
+                </View>
+              </Pressable>
+
+              {/* 5. Listas / Encuestas (Deshabilitado si hay Espacio, Imagen 4) */}
+              <Pressable
+                onPress={isMediaDisabled ? undefined : handleTogglePoll}
+                disabled={isMediaDisabled}
+                hitSlop={8}
+                style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Añadir encuesta"
+              >
+                <Feather
+                  name="bar-chart-2"
+                  size={21}
+                  color={isMediaDisabled ? '#536471' : '#1D9BF0'}
+                />
+              </Pressable>
+
+              {/* 6. Insertar ubicaciones (SIEMPRE DISPONIBLE en Imagen 4) */}
+              <Pressable
+                onPress={() => setShowLocationModal(true)}
+                hitSlop={8}
+                style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Insertar ubicación"
+              >
+                <Feather name="map-pin" size={21} color="#1D9BF0" />
+              </Pressable>
+
+              {/* 7. Flag / Categoría (Deshabilitado si hay Espacio, Imagen 4) */}
+              <Pressable
+                onPress={
+                  isMediaDisabled
+                    ? undefined
+                    : () => {
+                        const curIdx = categories.findIndex((c) => c.id === selectedCategoryId);
+                        const nextCat = categories[(curIdx + 1) % (categories.length || 1)];
+                        if (nextCat) {
+                          setSelectedCategoryId(nextCat.id);
+                          toast.info(`Categoría: ${nextCat.name}`);
+                        }
+                      }
+                }
+                disabled={isMediaDisabled}
+                hitSlop={8}
+                style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Elegir categoría o flag"
+              >
+                <Feather
+                  name="flag"
+                  size={20}
+                  color={isMediaDisabled ? '#536471' : '#1D9BF0'}
+                />
+              </Pressable>
+            </ScrollView>
+
+            {/* Lado derecho: Indicador circular (Imagen 3) y Conectar posts (+) */}
+            <View style={s.toolbarRightSide}>
+              {/* Indicador circular de caracteres según plan Freemium vs Premium (Imagen 3) */}
+              <CircularProgressMeter progress={progress} charsLeft={charsLeft} />
+
+              <View style={[s.verticalDivider, { backgroundColor: lineCol }]} />
+
+              {/* Botón (+) Conectar varios posts (Hilo / Threads, siempre activo) */}
+              <Pressable
+                onPress={addThreadPost}
+                hitSlop={8}
+                style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Conectar otro post a este hilo"
+              >
+                <Feather name="plus-circle" size={24} color="#1D9BF0" />
+              </Pressable>
             </View>
-
-            <View style={[s.verticalDivider, { backgroundColor: lineCol }]} />
-
-            {/* Botón (+) Conectar varios posts (Hilo / Threads) */}
-            <Pressable
-              onPress={addThreadPost}
-              hitSlop={8}
-              style={({ pressed }) => [s.toolBtn, pressed && { opacity: 0.6 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Conectar otro post a este hilo"
-            >
-              <Feather name="plus-circle" size={24} color="#1D9BF0" />
-            </Pressable>
           </View>
         </View>
 
@@ -694,14 +794,17 @@ export default function NewPostScreen() {
           visible={showSpacesModal}
           onClose={() => setShowSpacesModal(false)}
           onConfirm={(config) => {
-            updateActivePost((p) => ({
-              ...p,
-              spaceConfig: config,
-              text:
-                config.shouldPostAnnouncement && !p.text.trim()
-                  ? `¡No te pierdas mi próximo Espacio: "${config.title}"! 🎙️✨\n🗓️ ${config.scheduledAt || 'Próximamente'}`
-                  : p.text,
-            }));
+            updateActivePost((p) => {
+              const spaceLink = config.spaceUrl || 'https://x.com/i/spaces/1broAmaIEnPMBL';
+              const reminderText = `Definir un recordatorio para mi próximo Espacio.\n${spaceLink}`;
+              return {
+                ...p,
+                spaceConfig: config,
+                text: config.shouldPostAnnouncement
+                  ? reminderText
+                  : (p.text.trim() ? p.text : reminderText),
+              };
+            });
           }}
         />
 
@@ -717,7 +820,7 @@ export default function NewPostScreen() {
           onSelectLocation={(loc) => updateActivePost((p) => ({ ...p, location: loc }))}
         />
       </KeyboardAvoidingView>
-    </Screen>
+    </View>
   );
 }
 
@@ -756,7 +859,7 @@ const s = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: gutter,
     paddingTop: space.sm,
-    paddingBottom: 40,
+    paddingBottom: 20,
   },
   postRowWrapper: {
     flexDirection: 'row',
@@ -792,10 +895,76 @@ const s = StyleSheet.create({
     fontSize: 18,
     fontFamily: fonts.regular,
     lineHeight: 24,
-    minHeight: 70,
+    minHeight: 60,
     textAlignVertical: 'top',
     paddingVertical: 0,
     paddingHorizontal: 0,
+  },
+  purpleSpaceCard: {
+    backgroundColor: '#7C5CFC',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+  },
+  spaceHostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  spaceHostAvatarWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    overflow: 'hidden',
+  },
+  spaceHostAvatarImg: {
+    width: '100%',
+    height: '100%',
+  },
+  spaceHostNameText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: fonts.bold,
+    marginRight: 8,
+  },
+  spaceHostBadge: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  spaceHostBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontFamily: fonts.bold,
+  },
+  removeSpaceBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  purpleSpaceTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontFamily: fonts.bold,
+    marginBottom: 10,
+  },
+  spaceTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  spaceTimeText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: fonts.medium,
   },
   imagesGrid: {
     borderRadius: radius.md,
@@ -879,66 +1048,6 @@ const s = StyleSheet.create({
     color: '#1D9BF0',
     fontFamily: fonts.medium,
   },
-  spaceCard: {
-    backgroundColor: '#201633',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: '#7856FF',
-    padding: 12,
-    marginTop: 10,
-    gap: 6,
-  },
-  spaceCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  spaceStatusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  spaceStatusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  spaceStatusText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontFamily: fonts.bold,
-  },
-  spaceCardTitle: {
-    fontSize: 16,
-    fontFamily: fonts.bold,
-  },
-  spaceScheduleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  spaceScheduleText: {
-    fontSize: 13,
-    color: '#A78BFA',
-    fontFamily: fonts.medium,
-  },
-  spaceTagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 2,
-  },
-  spaceTag: {
-    backgroundColor: '#30214C',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  spaceTagText: {
-    fontSize: 11,
-    color: '#D8B4FE',
-    fontFamily: fonts.medium,
-  },
   audienceRow: {
     paddingHorizontal: gutter,
     paddingVertical: 8,
@@ -995,22 +1104,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingLeft: 8,
-  },
-  circleProgressWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  miniCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  circleCharsText: {
-    fontSize: 10,
-    fontFamily: fonts.bold,
   },
   verticalDivider: {
     width: 1,
