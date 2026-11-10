@@ -2,7 +2,12 @@ import { Feather } from '@expo/vector-icons';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { fonts, radius, space, Text, useTheme } from '@/ui';
 
-export type AudienceType = 'everyone' | 'following' | 'mentioned';
+export type AudienceType =
+  | 'everyone'
+  | 'verified'
+  | 'following'
+  | 'mentioned'
+  | 'following_of_following';
 
 interface AudienceModalProps {
   visible: boolean;
@@ -11,37 +16,47 @@ interface AudienceModalProps {
   onClose: () => void;
 }
 
-const AUDIENCE_OPTIONS: {
+interface AudienceOption {
   key: AudienceType;
   icon: keyof typeof Feather.glyphMap;
   title: string;
-  desc: string;
-}[] = [
+}
+
+const AUDIENCE_OPTIONS: AudienceOption[] = [
   {
     key: 'everyone',
     icon: 'globe',
-    title: 'Cualquier persona',
-    desc: 'Cualquier persona puede responder',
+    title: 'Todos',
+  },
+  {
+    key: 'verified',
+    icon: 'check-circle',
+    title: 'Cuentas con marca de verificación',
   },
   {
     key: 'following',
-    icon: 'users',
-    title: 'Cuentas que sigues',
-    desc: 'Solo las cuentas que sigues pueden responder',
+    icon: 'user-check',
+    title: 'Cuentas a las que sigues',
   },
   {
     key: 'mentioned',
     icon: 'at-sign',
-    title: 'Solo las personas que menciones',
-    desc: 'Solo las personas etiquetadas en este post pueden responder',
+    title: 'Solo las cuentas que menciones',
+  },
+  {
+    key: 'following_of_following',
+    icon: 'users',
+    title: 'Cuentas a las que sigues y a las que ellas siguen',
   },
 ];
 
 export function AudienceModal({ visible, selected, onSelect, onClose }: AudienceModalProps) {
-  const { isDark, colors } = useTheme();
+  const { isDark } = useTheme();
 
-  const modalBg = isDark ? '#16181C' : '#FFFFFF';
+  const modalBg = isDark ? '#000000' : '#FFFFFF';
   const textPrimary = isDark ? '#FFFFFF' : '#0F1419';
+  const textSecondary = '#71767B';
+  const radioInactive = isDark ? '#536471' : '#8899A6';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -52,9 +67,9 @@ export function AudienceModal({ visible, selected, onSelect, onClose }: Audience
         >
           <View style={s.handle} />
 
-          <Text style={[s.title, { color: textPrimary }]}>¿Quién puede responder?</Text>
-          <Text style={s.subtitle}>
-            Elige quién puede responder a este post. Cualquier persona mencionada siempre podrá responder.
+          <Text style={[s.title, { color: textPrimary }]}>¿Quiénes pueden responder?</Text>
+          <Text style={[s.subtitle, { color: textSecondary }]}>
+            Elige quiénes pueden responder a este post. Recuerda que cualquier persona mencionada siempre puede responder.
           </Text>
 
           <View style={s.optionsList}>
@@ -69,20 +84,21 @@ export function AudienceModal({ visible, selected, onSelect, onClose }: Audience
                   }}
                   style={({ pressed }) => [s.optionRow, pressed && { opacity: 0.7 }]}
                 >
-                  <View style={[s.iconCircle, { backgroundColor: active ? '#1D9BF0' : (isDark ? '#202327' : '#EFF3F4') }]}>
-                    <Feather
-                      name={opt.icon}
-                      size={18}
-                      color={active ? '#FFFFFF' : '#71767B'}
-                    />
+                  <View style={s.iconWrapper}>
+                    <Feather name={opt.icon} size={20} color={textPrimary} />
                   </View>
 
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.optionTitle, { color: textPrimary }]}>{opt.title}</Text>
-                    <Text style={s.optionDesc}>{opt.desc}</Text>
-                  </View>
+                  <Text style={[s.optionTitle, { color: textPrimary }]}>{opt.title}</Text>
 
-                  {active && <Feather name="check" size={20} color="#1D9BF0" />}
+                  {/* Radio selector estilo X */}
+                  <View
+                    style={[
+                      s.radioOuter,
+                      active ? s.radioOuterActive : { borderColor: radioInactive },
+                    ]}
+                  >
+                    {active && <View style={s.radioInner} />}
+                  </View>
                 </Pressable>
               );
             })}
@@ -96,13 +112,13 @@ export function AudienceModal({ visible, selected, onSelect, onClose }: Audience
 const s = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 22,
     paddingTop: 12,
     paddingBottom: 36,
   },
@@ -112,43 +128,55 @@ const s = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#71767B',
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   title: {
-    fontSize: 18,
+    fontSize: 22,
     fontFamily: fonts.bold,
-    marginBottom: 4,
+    marginBottom: 8,
+    lineHeight: 28,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#71767B',
-    lineHeight: 18,
-    marginBottom: 20,
+    fontSize: 15,
     fontFamily: fonts.regular,
+    lineHeight: 21,
+    marginBottom: 20,
   },
   optionsList: {
-    gap: 16,
+    gap: 4,
   },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    paddingVertical: 14,
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  iconWrapper: {
+    width: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 16,
   },
   optionTitle: {
-    fontSize: 15,
+    flex: 1,
+    fontSize: 16,
     fontFamily: fonts.bold,
-    marginBottom: 2,
   },
-  optionDesc: {
-    fontSize: 13,
-    color: '#71767B',
-    fontFamily: fonts.regular,
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  radioOuterActive: {
+    borderColor: '#1D9BF0',
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#1D9BF0',
   },
 });

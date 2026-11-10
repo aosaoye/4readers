@@ -289,14 +289,18 @@ export default function NewPostScreen() {
   const textSecondary = '#71767B';
   const lineCol = isDark ? '#2F3336' : '#CFD9DE';
 
-  const audienceLabel = useMemo(() => {
+  const audienceInfo = useMemo<{ label: string; icon: keyof typeof Feather.glyphMap }>(() => {
     switch (audience) {
+      case 'verified':
+        return { label: 'Solo cuentas verificadas pueden responder', icon: 'check-circle' };
       case 'following':
-        return 'Las personas que sigues pueden responder';
+        return { label: 'Las cuentas que sigues pueden responder', icon: 'user-check' };
       case 'mentioned':
-        return 'Solo las personas mencionadas pueden responder';
+        return { label: 'Solo las personas mencionadas pueden responder', icon: 'at-sign' };
+      case 'following_of_following':
+        return { label: 'Cuentas a las que sigues y siguen pueden responder', icon: 'users' };
       default:
-        return 'Cualquier persona puede responder';
+        return { label: 'Cualquier persona puede responder', icon: 'globe' };
     }
   }, [audience]);
 
@@ -532,8 +536,8 @@ export default function NewPostScreen() {
             onPress={() => setShowAudienceModal(true)}
             style={({ pressed }) => [s.audienceBtn, pressed && { opacity: 0.7 }]}
           >
-            <Feather name="globe" size={15} color="#1D9BF0" />
-            <Text style={s.audienceText}>{audienceLabel}</Text>
+            <Feather name={audienceInfo.icon} size={15} color="#1D9BF0" />
+            <Text style={s.audienceText}>{audienceInfo.label}</Text>
           </Pressable>
         </View>
 
@@ -689,7 +693,16 @@ export default function NewPostScreen() {
         <SpacesModal
           visible={showSpacesModal}
           onClose={() => setShowSpacesModal(false)}
-          onConfirm={(config) => updateActivePost((p) => ({ ...p, spaceConfig: config }))}
+          onConfirm={(config) => {
+            updateActivePost((p) => ({
+              ...p,
+              spaceConfig: config,
+              text:
+                config.shouldPostAnnouncement && !p.text.trim()
+                  ? `¡No te pierdas mi próximo Espacio: "${config.title}"! 🎙️✨\n🗓️ ${config.scheduledAt || 'Próximamente'}`
+                  : p.text,
+            }));
+          }}
         />
 
         <GifModal

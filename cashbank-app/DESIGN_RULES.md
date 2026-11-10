@@ -153,3 +153,56 @@ Este documento contiene las restricciones y estándares visuales obligatorios de
        - `Contactar con soporte` con chevron `>`.
        - `Más información` con chevron `>`.
    - Todos los elementos abren su respectivo modal informativo o acción con detalles de requisitos y analíticas.
+
+
+---
+
+## 13. Sistema de Temas Claro/Oscuro Reactivo (Dark Mode Puro y Light Mode)
+1. **Regla de Oro de Reactividad**:
+   - Todo componente o pantalla DEBE consumir el hook `useTheme()` (`const { isDark, colors } = useTheme();`).
+   - **PROHIBIDO** importar `colors` estático en llamadas a `StyleSheet.create` para elementos con colores dependientes del tema (fondos, bordes, tarjetas, textos secundarios, etc.).
+   - En **Modo Oscuro**: El fondo del canvas DEBE ser negro puro (`#000000` / `#09090B`), las tarjetas y elevaciones en gris muy oscuro (`#121215`, `#16181C`), los bordes sutiles (`#272C30`, `#2F3336`), y el texto principal blanco puro (`#FFFFFF`).
+   - En **Modo Claro**: El fondo del canvas DEBE ser blanco/gris neutro muy claro (`#FFFFFF` / `#F8FAFC`), tarjetas blancas puras (`#FFFFFF`), bordes suaves (`#EFF3F4`, `#CFD9DE`), y textos oscuros (`#0F1419`, `#536471`).
+2. **Componentes y Vistas de Detalle**:
+   - Las barras de métricas de posts, paneles de propinas (`TipPanel`), secciones de comentarios (`CommentsSection`) y modales deben adaptar sus fondos y bordes de forma inmediata al cambiar el tema, sin requerir reinicio de la aplicación.
+
+---
+
+## 14. Composición y Publicación de Posts (Inserción de GIFs, Imágenes y Resumen)
+1. **Manejo Estricto de GIFs y Medios**:
+   - **EL GIF O IMAGEN ANIMADA NUNCA DEBE ASIGNARSE A `coverImageUrl`**. La propiedad `coverImageUrl` está reservada exclusivamente para fotografías panorámicas de cabecera/portada.
+   - Todo GIF seleccionado por el usuario DEBE insertarse **dentro del cuerpo del contenido (`content`)** en formato Markdown: `![GIF](url)`.
+   - Si el post contiene tanto portada como GIF, la portada se muestra en la cabecera del post y el GIF se renderiza fluidamente dentro del flujo de lectura del texto.
+2. **Renderizado de Contenido (`PostContentRenderer`)**:
+   - El renderizador de contenido de posts (`app/post/[id].tsx`) debe procesar las etiquetas Markdown `![desc](url)`, separando los párrafos de texto y renderizando las imágenes/GIFs con bordes redondeados y aspecto nativo en su posición exacta entre los párrafos.
+3. **Manejo del Resumen (`summary`)**:
+   - **PROHIBIDO** duplicar el contenido completo en el campo `summary`.
+   - Si `summary` es idéntico a `content` o no aporta un extracto diferenciado, no debe renderizarse como un bloque duplicado en la pantalla de detalle del post.
+
+---
+
+## 15. Espacios de Audio (Spaces): Onboarding, Temas, Programación y Confirmación
+1. **Onboarding ("Graba tu Espacio") Único**:
+   - La pantalla de introducción y beneficios ("Graba tu Espacio") debe mostrarse **UNA SOLA VEZ** por usuario.
+   - El estado de visualización se persiste en `AsyncStorage` (`@spaces_intro_seen`). Una vez que el usuario presiona «Entendido», se guarda el indicador y las aperturas posteriores abren directamente la pantalla «Crea tu Espacio».
+2. **Selector de Audiencia ("¿Quiénes pueden responder?")**:
+   - Modal inferior de 5 opciones con iconos y selector radio a la derecha:
+     1. 🌐 `Todos`
+     2. 🛡️ `Cuentas con marca de verificación`
+     3. 👤 `Cuentas a las que sigues`
+     4. ＠ `Solo las cuentas que menciones`
+     5. 👥 `Cuentas a las que sigues y a las que ellas siguen`
+3. **Selector de Temas ("Añadir Temas")**:
+   - Bottom sheet con título «Añadir Temas» y subtítulo «Ayuda a las personas que siguen Temas a descubrir tu Espacio. Selecciona un máximo de 3.».
+   - Píldoras de temas agrupadas (Deportes, Fútbol, Real Madrid, etc.), contador en tiempo real «X seleccionados (máx. 3)» y botón píldora blanco «Guardar».
+4. **Programador de Espacios ("Programa tu Espacio")**:
+   - Selector tipo rueda/columnas con Día, Mes, Año, Hora, Minuto y Período (a. m. / p. m.).
+   - **El año se calcula y actualiza AUTOMÁTICAMENTE** en función del año actual (`new Date().getFullYear()`).
+5. **Pantalla de Confirmación ("Tu Espacio está programado. ¡Ahora anúncialo!")**:
+   - Al pulsar «Programar», muestra la pantalla de éxito con checkmark azul/morado, tarjeta morada de vista previa del Espacio con avatar, nombre de anfitrión y fecha/hora programada.
+   - 4 botones circulares de acción rápida:
+     1. ✏️ `Postear` (Redactar un post anunciando el espacio)
+     2. 💬 `Chat` (Compartir por mensaje)
+     3. 🔗 `Copiar enlace` (Copiar URL al portapapeles)
+     4. 📤 `Compartir por...` (Lanzar share sheet nativo)
+   - Botón píldora inferior «Editar» para volver a modificar los datos si se desea.
