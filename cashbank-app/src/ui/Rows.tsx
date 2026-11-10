@@ -4,7 +4,7 @@ import React, { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import type { Post } from '@/api/types';
 import { formatRelativeDate, readingMinutes } from '@/lib/format';
-import { parseRepost } from '@/lib/reposts';
+import { parseRepost } from '@/lib/reposts/parseRepost';
 import { Avatar } from './Avatar';
 import { Cover } from './Cover';
 import { Text } from './Text';

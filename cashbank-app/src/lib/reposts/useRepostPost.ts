@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { useMe } from '@/api/hooks';
+import { useMe } from '@/api/hooks/useMe';
 import type { CreatePostInput, Post } from '@/api/types';
-import { toast } from '@/ui';
+import { toast } from '@/ui/Toast';
 import { formatRepostSummary, parseRepost } from './parseRepost';
 import { readRepostIds, writeRepostIds } from './storage';
 

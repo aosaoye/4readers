@@ -14,14 +14,9 @@ import {
   Share,
   StyleSheet,
   TextInput,
-  UIManager,
   useWindowDimensions,
   View,
 } from 'react-native';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   flat,

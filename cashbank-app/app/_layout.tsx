@@ -29,12 +29,13 @@ function RootNavigation() {
       <Stack
         screenOptions={{
           headerShown: false,
+          presentation: 'card',
           contentStyle: { backgroundColor: colors.background },
         }}
       >
         <Stack.Protected guard={authenticated}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="post/[id]" />
+          <Stack.Screen name="(tabs)" options={{ presentation: 'card' }} />
+          <Stack.Screen name="post/[id]" options={{ presentation: 'card' }} />
           <Stack.Screen name="post/[id]/comments" />
           <Stack.Screen name="post/[id]/comment" options={{ presentation: 'modal' }} />
           <Stack.Screen name="post/new" options={{ presentation: 'modal' }} />

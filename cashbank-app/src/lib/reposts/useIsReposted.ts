@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMe } from '@/api/hooks';
+import { useMe } from '@/api/hooks/useMe';
 import type { Post } from '@/api/types';
 import { parseRepost } from './parseRepost';
 import { readRepostIds } from './storage';

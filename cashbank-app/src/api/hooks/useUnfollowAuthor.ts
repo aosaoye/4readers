@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from '@/ui';
+import { toast } from '@/ui/Toast';
 import { api } from '../client';
 import { qk } from '../keys';
 import type { AuthorFollowStatus } from '../types';

@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMe } from '@/api/hooks';
+import { useMe } from '@/api/hooks/useMe';
 import { qk } from '@/api/keys';
 import type { Post } from '@/api/types';
-import { toast } from '@/ui';
+import { toast } from '@/ui/Toast';
 import { type Bookmark, loadBookmarks, storageKey } from './storage';
 
 export function useToggleBookmark() {
