@@ -1,12 +1,15 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   CoreBridge,
+  ImageBridge,
   PlaceholderBridge,
   RichText,
   TenTapStartKit,
   Toolbar,
+  useBridgeState,
   useEditorBridge,
 } from '@10play/tentap-editor';
+import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { router } from 'expo-router';
@@ -14,6 +17,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -47,6 +51,7 @@ export default function ArticleScreen() {
   } = usePostDraft(800);
 
   const [title, setTitle] = useState('');
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [stats, setStats] = useState({ words: 0, readingTime: 1, chars: 0 });
 
@@ -57,6 +62,9 @@ export default function ArticleScreen() {
   const [showInsertModal, setShowInsertModal] = useState(false);
   const [showMoreModal, setShowMoreModal] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showCoverModal, setShowCoverModal] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkInput, setLinkInput] = useState('');
 
   // Detección de teclado para anclar la barra exactamente encima
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -140,6 +148,16 @@ export default function ArticleScreen() {
       li {
         margin-bottom: 6px;
       }
+      ::selection {
+        background: ${isDark ? 'rgba(228, 83, 29, 0.45)' : '#FCE5DD'};
+      }
+      img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 8px;
+        margin: 14px 0;
+        display: block;
+      }
       p.is-editor-empty:first-child::before {
         color: ${isDark ? '#536471' : '#94A3B8'};
         content: attr(data-placeholder);
@@ -151,7 +169,7 @@ export default function ArticleScreen() {
     [isDark]
   );
 
-  // Configuración del tema visual de la Toolbar inferior
+  // Configuración del tema visual de la Toolbar inferior (sin recuadros blancos)
   const editorTheme = useMemo(
     () => ({
       toolbar: {
@@ -164,25 +182,39 @@ export default function ArticleScreen() {
           minWidth: '100%',
         },
         toolbarButton: {
-          backgroundColor: isDark ? '#16181C' : '#F8FAFC',
-          paddingHorizontal: 8,
+          backgroundColor: 'transparent',
+          paddingHorizontal: 7,
           alignItems: 'center',
           justifyContent: 'center',
         },
+        iconWrapper: {
+          backgroundColor: 'transparent',
+          borderRadius: 6,
+          padding: 3,
+        },
+        iconWrapperActive: {
+          backgroundColor: isDark ? 'rgba(228, 83, 29, 0.25)' : '#FCE5DD',
+          borderRadius: 6,
+          padding: 3,
+        },
+        iconWrapperDisabled: {
+          backgroundColor: 'transparent',
+          opacity: 0.35,
+        },
         icon: {
           tintColor: isDark ? '#FFFFFF' : '#0F172A',
-          width: 24,
-          height: 24,
+          width: 22,
+          height: 22,
         },
         iconActive: {
           tintColor: '#E4531D',
+          width: 22,
+          height: 22,
         },
         iconDisabled: {
           tintColor: isDark ? '#536471' : '#CBD5E1',
-        },
-        iconWrapperActive: {
-          backgroundColor: isDark ? 'rgba(228, 83, 29, 0.22)' : '#FCE5DD',
-          borderRadius: 6,
+          width: 22,
+          height: 22,
         },
         linkBarTheme: {
           addLinkContainer: {
@@ -213,6 +245,7 @@ export default function ArticleScreen() {
     theme: editorTheme as any,
     bridgeExtensions: [
       ...TenTapStartKit,
+      ImageBridge,
       PlaceholderBridge.configureExtension({
         placeholder: 'Comienza a escribir tu historia, artículo o guía aquí...',
       }),
@@ -238,14 +271,26 @@ export default function ArticleScreen() {
         title,
         html,
         plainText: cleanText,
+        coverImageUrl,
+        categoryId: selectedCategoryId || null,
       });
     },
   });
+
+  const editorState = useBridgeState(editor);
+
+  // Detectar si hay selección activa de texto para mostrar el menú de contexto flotante
+  const hasTextSelected = Boolean(
+    editorState?.selection &&
+    editorState.selection.from !== editorState.selection.to
+  );
 
   // Hidratar borrador inicial desde AsyncStorage
   useEffect(() => {
     if (isLoaded && initialDraft) {
       if (initialDraft.title) setTitle(initialDraft.title);
+      if (initialDraft.coverImageUrl) setCoverImageUrl(initialDraft.coverImageUrl);
+      if (initialDraft.categoryId) setSelectedCategoryId(initialDraft.categoryId);
       if (initialDraft.html && editor) {
         editor.setContent(initialDraft.html);
       }
@@ -258,17 +303,110 @@ export default function ArticleScreen() {
     }
   }, [isLoaded, initialDraft, editor]);
 
-  const handleTitleChange = (newTitle: string) => {
-    setTitle(newTitle);
+  const triggerAutoSave = (newTitle: string, newCover: string | null, newCatId: string) => {
     editor.getHTML().then((html) => {
       editor.getText().then((plainText) => {
         saveDraft({
           title: newTitle,
           html,
           plainText: (plainText || '').trim(),
+          coverImageUrl: newCover,
+          categoryId: newCatId || null,
         });
       });
     });
+  };
+
+  const handleTitleChange = (newTitle: string) => {
+    setTitle(newTitle);
+    triggerAutoSave(newTitle, coverImageUrl, selectedCategoryId);
+  };
+
+  // Selector de imagen de portada desde la galería
+  const handlePickFromGallery = async () => {
+    try {
+      setShowCoverModal(false);
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Se requiere permiso para acceder a la galería');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
+        const uri = result.assets[0].uri;
+        setCoverImageUrl(uri);
+        triggerAutoSave(title, uri, selectedCategoryId);
+        toast.success('Portada añadida al artículo');
+      }
+    } catch {
+      toast.error('Error al seleccionar imagen');
+    }
+  };
+
+  // Capturar foto de portada con la cámara
+  const handleTakePhoto = async () => {
+    try {
+      setShowCoverModal(false);
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Se requiere permiso de cámara');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
+        const uri = result.assets[0].uri;
+        setCoverImageUrl(uri);
+        triggerAutoSave(title, uri, selectedCategoryId);
+        toast.success('Foto de portada capturada');
+      }
+    } catch {
+      toast.error('Error al abrir la cámara');
+    }
+  };
+
+  // Insertar imagen en el cuerpo del texto
+  const handleInsertBodyImage = async () => {
+    try {
+      setShowInsertModal(false);
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('Se requiere permiso para acceder a la galería');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
+        editor.setImage(result.assets[0].uri);
+        toast.success('Imagen insertada en el texto');
+      }
+    } catch {
+      toast.error('Error al insertar imagen');
+    }
+  };
+
+  // Aplicar enlace al texto seleccionado
+  const handleApplyLink = () => {
+    if (linkInput.trim()) {
+      editor.setLink(linkInput.trim());
+    } else {
+      editor.setLink('');
+    }
+    setShowLinkModal(false);
+    setLinkInput('');
   };
 
   // Exportar artículo a PDF profesional
@@ -293,6 +431,13 @@ export default function ArticleScreen() {
                 color: #0F172A;
                 max-width: 720px;
                 margin: 0 auto;
+              }
+              .cover-banner {
+                width: 100%;
+                max-height: 320px;
+                object-fit: cover;
+                border-radius: 12px;
+                margin-bottom: 24px;
               }
               h1.doc-title {
                 font-size: 32px;
@@ -329,6 +474,7 @@ export default function ArticleScreen() {
             </style>
           </head>
           <body>
+            ${coverImageUrl ? `<img src="${coverImageUrl}" class="cover-banner" />` : ''}
             <h1 class="doc-title">${title || 'Artículo sin título'}</h1>
             <div class="meta">${stats.words} palabras · ~${stats.readingTime} min de lectura · Generado en 4readers</div>
             ${htmlContent}
@@ -361,6 +507,8 @@ export default function ArticleScreen() {
           onPress: async () => {
             await clearDraft();
             setTitle('');
+            setCoverImageUrl(null);
+            setSelectedCategoryId('');
             editor.setContent('<p></p>');
             setStats({ words: 0, readingTime: 1, chars: 0 });
             setShowMoreModal(false);
@@ -394,6 +542,7 @@ export default function ArticleScreen() {
         content: html,
         summary: cleanBody.slice(0, 200),
         categoryId: selectedCategoryId || undefined,
+        coverImageUrl: coverImageUrl || undefined,
       } as any,
       {
         onSuccess: async () => {
@@ -440,7 +589,7 @@ export default function ArticleScreen() {
             hitSlop={10}
             style={({ pressed }) => [
               s.circleCheckBtn,
-              { backgroundColor: isDark ? '#1D9BF0' : '#1D9BF0' },
+              { backgroundColor: '#1D9BF0' },
               pressed && { opacity: 0.8 },
             ]}
             accessibilityRole="button"
@@ -519,9 +668,54 @@ export default function ArticleScreen() {
           </View>
         </View>
 
-        {/* LIENZO A PANTALLA COMPLETA CONTINUO: Título + Categoría + Editor TipTap */}
+        {/* LIENZO A PANTALLA COMPLETA CONTINUO: Portada + Título + Categoría + Editor TipTap */}
         <View style={s.canvasContainer}>
-          {/* Título editorial grande sin bordes, fluido y continuo */}
+          {/* 1. SECCIÓN DE IMAGEN DE PORTADA */}
+          {coverImageUrl ? (
+            <View style={s.coverWrapper}>
+              <Image source={{ uri: coverImageUrl }} style={s.coverImage} resizeMode="cover" />
+              <View style={s.coverActionsRow}>
+                <Pressable
+                  onPress={() => setShowCoverModal(true)}
+                  style={s.coverActionBtn}
+                  accessibilityLabel="Cambiar foto de portada"
+                >
+                  <Feather name="camera" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+                  <Text style={s.coverActionBtnText}>Cambiar</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setCoverImageUrl(null);
+                    triggerAutoSave(title, null, selectedCategoryId);
+                    toast.info('Portada eliminada');
+                  }}
+                  style={[s.coverActionBtn, { backgroundColor: 'rgba(220, 38, 38, 0.85)' }]}
+                  accessibilityLabel="Eliminar portada"
+                >
+                  <Feather name="trash-2" size={13} color="#FFFFFF" />
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => setShowCoverModal(true)}
+              style={({ pressed }) => [
+                s.addCoverBtn,
+                {
+                  borderColor: hairlineColor,
+                  backgroundColor: isDark ? '#111215' : '#F8FAFC',
+                },
+                pressed && { opacity: 0.75 },
+              ]}
+            >
+              <Feather name="image" size={15} color="#E4531D" />
+              <Text style={[s.addCoverText, { color: isDark ? '#71767B' : '#64748B' }]}>
+                Añadir imagen de portada
+              </Text>
+            </Pressable>
+          )}
+
+          {/* 2. Título editorial grande sin bordes, fluido y continuo */}
           <TextInput
             placeholder="Título del artículo"
             placeholderTextColor={isDark ? '#536471' : '#94A3B8'}
@@ -536,7 +730,7 @@ export default function ArticleScreen() {
             ]}
           />
 
-          {/* Selector de categoría sutil y discreto estilo pill */}
+          {/* 3. Selector de categoría sutil y discreto estilo pill */}
           <Pressable
             onPress={() => setShowCategoryModal(true)}
             style={({ pressed }) => [
@@ -555,7 +749,7 @@ export default function ArticleScreen() {
             <Feather name="chevron-down" size={12} color={isDark ? '#71767B' : '#64748B'} />
           </Pressable>
 
-          {/* Lienzo TipTap continuo a pantalla completa */}
+          {/* 4. Lienzo TipTap continuo a pantalla completa */}
           <View style={s.richTextWrapper} key={scheme}>
             <RichText
               editor={editor}
@@ -567,7 +761,167 @@ export default function ArticleScreen() {
           </View>
         </View>
 
-        {/* BARRA DE HERRAMIENTAS INFERIOR ANCLADA EXACTAMENTE SOBRE EL TECLADO (Imagen 2) */}
+        {/* 5. MENÚ DE CONTEXTO FLOTANTE AL SELECCIONAR TEXTO (Google Docs / Medium style) */}
+        {hasTextSelected && (
+          <View
+            style={[
+              s.floatingContextMenu,
+              {
+                backgroundColor: isDark ? '#242529' : '#0F172A',
+                borderColor: isDark ? '#3E4144' : '#334155',
+                bottom: isKeyboardVisible ? 54 : Math.max(bottom, 6) + 54,
+              },
+            ]}
+          >
+            {/* Negrita B */}
+            <Pressable
+              onPress={() => editor.toggleBold()}
+              style={[s.contextBtn, editorState.isBoldActive && s.contextBtnActive]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  s.contextBtnText,
+                  editorState.isBoldActive && s.contextBtnTextActive,
+                  { fontWeight: 'bold' },
+                ]}
+              >
+                B
+              </Text>
+            </Pressable>
+
+            {/* Cursiva I */}
+            <Pressable
+              onPress={() => editor.toggleItalic()}
+              style={[s.contextBtn, editorState.isItalicActive && s.contextBtnActive]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  s.contextBtnText,
+                  editorState.isItalicActive && s.contextBtnTextActive,
+                  { fontStyle: 'italic' },
+                ]}
+              >
+                I
+              </Text>
+            </Pressable>
+
+            {/* Subrayado U */}
+            <Pressable
+              onPress={() => editor.toggleUnderline()}
+              style={[s.contextBtn, editorState.isUnderlineActive && s.contextBtnActive]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  s.contextBtnText,
+                  editorState.isUnderlineActive && s.contextBtnTextActive,
+                  { textDecorationLine: 'underline' },
+                ]}
+              >
+                U
+              </Text>
+            </Pressable>
+
+            {/* Tachado S */}
+            <Pressable
+              onPress={() => editor.toggleStrike()}
+              style={[s.contextBtn, editorState.isStrikeActive && s.contextBtnActive]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  s.contextBtnText,
+                  editorState.isStrikeActive && s.contextBtnTextActive,
+                  { textDecorationLine: 'line-through' },
+                ]}
+              >
+                S
+              </Text>
+            </Pressable>
+
+            <View style={[s.contextDivider, { backgroundColor: isDark ? '#3E4144' : '#334155' }]} />
+
+            {/* H1 */}
+            <Pressable
+              onPress={() => editor.toggleHeading(1)}
+              style={[s.contextBtn, editorState.headingLevel === 1 && s.contextBtnActive]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  s.contextBtnText,
+                  editorState.headingLevel === 1 && s.contextBtnTextActive,
+                  { fontWeight: 'bold' },
+                ]}
+              >
+                H1
+              </Text>
+            </Pressable>
+
+            {/* H2 */}
+            <Pressable
+              onPress={() => editor.toggleHeading(2)}
+              style={[s.contextBtn, editorState.headingLevel === 2 && s.contextBtnActive]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  s.contextBtnText,
+                  editorState.headingLevel === 2 && s.contextBtnTextActive,
+                  { fontWeight: 'bold' },
+                ]}
+              >
+                H2
+              </Text>
+            </Pressable>
+
+            {/* Cita */}
+            <Pressable
+              onPress={() => editor.toggleBlockquote()}
+              style={[s.contextBtn, editorState.isBlockquoteActive && s.contextBtnActive]}
+              hitSlop={6}
+            >
+              <Feather
+                name="message-circle"
+                size={15}
+                color={editorState.isBlockquoteActive ? '#E4531D' : '#FFFFFF'}
+              />
+            </Pressable>
+
+            {/* Código */}
+            <Pressable
+              onPress={() => editor.toggleCode()}
+              style={[s.contextBtn, editorState.isCodeActive && s.contextBtnActive]}
+              hitSlop={6}
+            >
+              <Feather
+                name="code"
+                size={15}
+                color={editorState.isCodeActive ? '#E4531D' : '#FFFFFF'}
+              />
+            </Pressable>
+
+            {/* Enlace */}
+            <Pressable
+              onPress={() => {
+                setLinkInput(editorState.activeLink || '');
+                setShowLinkModal(true);
+              }}
+              style={[s.contextBtn, editorState.isLinkActive && s.contextBtnActive]}
+              hitSlop={6}
+            >
+              <Feather
+                name="link"
+                size={15}
+                color={editorState.isLinkActive ? '#E4531D' : '#FFFFFF'}
+              />
+            </Pressable>
+          </View>
+        )}
+
+        {/* 6. BARRA DE HERRAMIENTAS INFERIOR ANCLADA EXACTAMENTE SOBRE EL TECLADO (Imagen 2) */}
         <View
           style={[
             s.bottomToolbarWrap,
@@ -581,6 +935,139 @@ export default function ArticleScreen() {
           <Toolbar editor={editor} hidden={false} />
         </View>
       </KeyboardAvoidingView>
+
+      {/* MODAL: CONFIGURAR PORTADA */}
+      <Modal
+        visible={showCoverModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCoverModal(false)}
+      >
+        <View style={s.modalOverlay}>
+          <Pressable style={s.modalBackdrop} onPress={() => setShowCoverModal(false)} />
+          <View
+            style={[
+              s.modalSheet,
+              {
+                backgroundColor: isDark ? '#16181C' : '#FFFFFF',
+                paddingBottom: Math.max(bottom, 20),
+              },
+            ]}
+          >
+            <View style={[s.modalHandle, { backgroundColor: isDark ? '#3E4144' : '#CBD5E1' }]} />
+            <Text variant="heading" style={[s.sheetTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+              Imagen de portada del artículo
+            </Text>
+            <Text style={[s.sheetSubtitle, { color: isDark ? '#71767B' : '#64748B' }]}>
+              Añade una imagen en formato 16:9 para destacar tu historia en el feed y cabecera.
+            </Text>
+
+            <View style={{ marginTop: 16, gap: 10 }}>
+              <Pressable
+                onPress={handlePickFromGallery}
+                style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+              >
+                <Feather name="image" size={20} color="#E4531D" />
+                <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Elegir de la galería
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleTakePhoto}
+                style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+              >
+                <Feather name="camera" size={20} color="#E4531D" />
+                <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Tomar foto con la cámara
+                </Text>
+              </Pressable>
+
+              {coverImageUrl && (
+                <Pressable
+                  onPress={() => {
+                    setCoverImageUrl(null);
+                    setShowCoverModal(false);
+                    triggerAutoSave(title, null, selectedCategoryId);
+                    toast.info('Portada eliminada');
+                  }}
+                  style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+                >
+                  <Feather name="trash-2" size={20} color="#DC2626" />
+                  <Text style={[s.sheetMenuRowText, { color: '#DC2626' }]}>
+                    Eliminar imagen de portada
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL: INSERTAR ENLACE */}
+      <Modal
+        visible={showLinkModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowLinkModal(false)}
+      >
+        <View style={s.modalOverlay}>
+          <Pressable style={s.modalBackdrop} onPress={() => setShowLinkModal(false)} />
+          <View
+            style={[
+              s.modalSheet,
+              {
+                backgroundColor: isDark ? '#16181C' : '#FFFFFF',
+                paddingBottom: Math.max(bottom, 20),
+              },
+            ]}
+          >
+            <View style={[s.modalHandle, { backgroundColor: isDark ? '#3E4144' : '#CBD5E1' }]} />
+            <Text variant="heading" style={[s.sheetTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+              Insertar enlace web
+            </Text>
+
+            <TextInput
+              placeholder="https://ejemplo.com"
+              placeholderTextColor={isDark ? '#536471' : '#94A3B8'}
+              value={linkInput}
+              onChangeText={setLinkInput}
+              autoCapitalize="none"
+              keyboardType="url"
+              style={[
+                s.linkTextInput,
+                {
+                  color: isDark ? '#FFFFFF' : '#0F172A',
+                  borderColor: hairlineColor,
+                  backgroundColor: isDark ? '#000000' : '#F8FAFC',
+                },
+              ]}
+            />
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              <Pressable
+                onPress={handleApplyLink}
+                style={[s.publishPrimaryBtn, { flex: 1, marginBottom: 0 }]}
+              >
+                <Text style={s.publishPrimaryBtnText}>Aplicar enlace</Text>
+              </Pressable>
+              {Boolean(editorState.activeLink) && (
+                <Pressable
+                  onPress={() => {
+                    editor.setLink('');
+                    setShowLinkModal(false);
+                  }}
+                  style={[s.saveDraftBtn, { borderColor: '#DC2626', paddingHorizontal: 16, marginBottom: 0 }]}
+                >
+                  <Text style={{ color: '#DC2626', fontFamily: fonts.medium, fontSize: 14 }}>
+                    Quitar
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* MODAL 1: PUBLICAR ARTÍCULO */}
       <Modal
@@ -619,6 +1106,13 @@ export default function ArticleScreen() {
                 },
               ]}
             >
+              {coverImageUrl && (
+                <Image
+                  source={{ uri: coverImageUrl }}
+                  style={{ width: '100%', height: 110, borderRadius: 8, marginBottom: 8 }}
+                  resizeMode="cover"
+                />
+              )}
               <Text style={[s.previewTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]} numberOfLines={2}>
                 {title || 'Artículo sin título'}
               </Text>
@@ -708,6 +1202,7 @@ export default function ArticleScreen() {
                     onPress={() => {
                       setSelectedCategoryId(isSelected ? '' : cat.id);
                       setShowCategoryModal(false);
+                      triggerAutoSave(title, coverImageUrl, isSelected ? '' : cat.id);
                     }}
                     style={({ pressed }) => [
                       s.categoryRow,
@@ -762,6 +1257,69 @@ export default function ArticleScreen() {
               <Pressable
                 onPress={() => {
                   setShowInsertModal(false);
+                  setShowCoverModal(true);
+                }}
+                style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+              >
+                <Feather name="image" size={20} color="#E4531D" />
+                <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  {coverImageUrl ? 'Cambiar foto de portada' : 'Añadir imagen de portada'}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleInsertBodyImage}
+                style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+              >
+                <Feather name="plus-circle" size={20} color="#E4531D" />
+                <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Insertar imagen en el texto
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowInsertModal(false);
+                  setLinkInput(editorState.activeLink || '');
+                  setShowLinkModal(true);
+                }}
+                style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+              >
+                <Feather name="link" size={20} color="#E4531D" />
+                <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Insertar enlace web
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowInsertModal(false);
+                  editor.toggleHeading(1);
+                }}
+                style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+              >
+                <Feather name="type" size={20} color="#E4531D" />
+                <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Encabezado grande (H1)
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowInsertModal(false);
+                  editor.toggleHeading(2);
+                }}
+                style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+              >
+                <Feather name="type" size={17} color="#E4531D" />
+                <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Encabezado mediano (H2)
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowInsertModal(false);
                   editor.toggleBlockquote();
                 }}
                 style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
@@ -769,6 +1327,32 @@ export default function ArticleScreen() {
                 <Feather name="message-circle" size={20} color="#E4531D" />
                 <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                   Cita destacada (Blockquote)
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowInsertModal(false);
+                  editor.toggleBulletList();
+                }}
+                style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+              >
+                <Feather name="list" size={20} color="#E4531D" />
+                <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Lista con viñetas
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowInsertModal(false);
+                  editor.toggleOrderedList();
+                }}
+                style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+              >
+                <Feather name="hash" size={20} color="#E4531D" />
+                <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Lista numerada
                 </Text>
               </Pressable>
 
@@ -958,6 +1542,19 @@ export default function ArticleScreen() {
 
             <View style={{ marginTop: 16, gap: 10 }}>
               <Pressable
+                onPress={() => {
+                  setShowMoreModal(false);
+                  setShowCoverModal(true);
+                }}
+                style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
+              >
+                <Feather name="image" size={19} color={isDark ? '#FFFFFF' : '#0F172A'} />
+                <Text style={[s.sheetMenuRowText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  {coverImageUrl ? 'Cambiar imagen de portada' : 'Añadir imagen de portada'}
+                </Text>
+              </Pressable>
+
+              <Pressable
                 onPress={handleExportPDF}
                 style={({ pressed }) => [s.sheetMenuRow, pressed && { opacity: 0.7 }]}
               >
@@ -1030,12 +1627,59 @@ const s = StyleSheet.create({
   canvasContainer: {
     flex: 1,
   },
+  coverWrapper: {
+    width: '100%',
+    height: 180,
+    position: 'relative',
+    backgroundColor: '#16181C',
+  },
+  coverImage: {
+    width: '100%',
+    height: '100%',
+  },
+  coverActionsRow: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  coverActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  coverActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: fonts.medium,
+  },
+  addCoverBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
+  addCoverText: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+  },
   titleInput: {
     fontSize: 26,
     fontFamily: fonts.bold,
     lineHeight: 32,
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 6,
     backgroundColor: 'transparent',
   },
@@ -1057,6 +1701,47 @@ const s = StyleSheet.create({
   },
   richTextWrapper: {
     flex: 1,
+  },
+  floatingContextMenu: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 24,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    gap: 2,
+    elevation: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    zIndex: 999,
+  },
+  contextBtn: {
+    minWidth: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  contextBtnActive: {
+    backgroundColor: 'rgba(228, 83, 29, 0.25)',
+  },
+  contextBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: fonts.medium,
+  },
+  contextBtnTextActive: {
+    color: '#E4531D',
+  },
+  contextDivider: {
+    width: 1,
+    height: 18,
+    marginHorizontal: 4,
   },
   bottomToolbarWrap: {
     minHeight: 48,
@@ -1163,5 +1848,13 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 8,
+  },
+  linkTextInput: {
+    height: 46,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    marginTop: 14,
   },
 });

@@ -7,6 +7,8 @@ export interface PostDraftData {
   title: string;
   html: string;
   plainText: string;
+  coverImageUrl?: string | null;
+  categoryId?: string | null;
   updatedAt: number;
 }
 
@@ -40,13 +42,19 @@ export function usePostDraft(debounceMs = 800) {
 
   // Guardado con debounce para no saturar el hilo JS
   const saveDraft = useCallback(
-    (data: { title: string; html: string; plainText: string }) => {
+    (data: {
+      title: string;
+      html: string;
+      plainText: string;
+      coverImageUrl?: string | null;
+      categoryId?: string | null;
+    }) => {
       setSaveStatus('saving');
       if (timerRef.current) clearTimeout(timerRef.current);
 
       timerRef.current = setTimeout(async () => {
         try {
-          if (!data.title.trim() && !data.plainText.trim() && !data.html.trim()) {
+          if (!data.title.trim() && !data.plainText.trim() && !data.html.trim() && !data.coverImageUrl) {
             await AsyncStorage.removeItem(DRAFT_STORAGE_KEY);
             setSaveStatus('idle');
             return;
