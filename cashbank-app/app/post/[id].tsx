@@ -23,6 +23,7 @@ import {
 } from '@/api/hooks';
 import {
   CommentsSection,
+  PostContentReader,
   PostEngagementBar,
   PremiumUnlockPanel,
   TipPanel,
@@ -218,6 +219,7 @@ export default function PostDetail() {
   // Evitar duplicación de texto entre summary y content
   const cleanSummary = (repostMeta?.cleanSummary ?? post.summary ?? '').trim();
   const cleanContent = (post.content ?? '').trim();
+  const isHtmlContent = Boolean(cleanContent && /<\/?[a-z][\s\S]*>/i.test(cleanContent));
   const isSummaryDuplicate =
     !cleanSummary ||
     cleanSummary === cleanContent ||
@@ -375,6 +377,11 @@ export default function PostDetail() {
               )}
               {post.isLocked ? (
                 <PremiumUnlockPanel post={post} />
+              ) : isHtmlContent ? (
+                <PostContentReader
+                  content={cleanContent}
+                  horizontalPadding={space.lg * 2}
+                />
               ) : (
                 <PostContentRenderer
                   content={post.content}

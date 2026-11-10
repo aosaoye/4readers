@@ -39,6 +39,7 @@ function RootNavigation() {
           <Stack.Screen name="post/[id]/comments" />
           <Stack.Screen name="post/[id]/comment" options={{ presentation: 'modal' }} />
           <Stack.Screen name="post/new" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="post/article" options={{ presentation: 'card' }} />
           <Stack.Screen name="category/[id]" />
           <Stack.Screen name="author/[username]" />
           <Stack.Screen name="organization/[slug]" />

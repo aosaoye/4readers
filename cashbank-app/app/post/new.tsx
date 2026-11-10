@@ -117,9 +117,15 @@ function CircularProgressMeter({
 }
 
 export default function NewPostScreen() {
-  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const { edit, mode } = useLocalSearchParams<{ edit?: string; mode?: string }>();
   const editing = !!edit;
   const existing = usePost(edit ?? '', editing);
+
+  useEffect(() => {
+    if (mode === 'article') {
+      router.replace('/post/article');
+    }
+  }, [mode]);
 
   const { isDark } = useTheme();
   const { top, bottom } = useSafeAreaInsets();
@@ -426,6 +432,20 @@ export default function NewPostScreen() {
           </Pressable>
 
           <View style={s.headerRightSide}>
+            <Pressable
+              onPress={() => router.push('/post/article')}
+              style={({ pressed }) => [
+                s.articleModeBtn,
+                { borderColor: lineCol, backgroundColor: isDark ? '#16181C' : '#F7F9F9' },
+                pressed && { opacity: 0.7 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Escribir artículo con formato enriquecido"
+            >
+              <Feather name="file-text" size={13} color="#1D9BF0" />
+              <Text style={[s.articleModeBtnText, { color: textPrimary }]}>Artículo</Text>
+            </Pressable>
+
             <Pressable
               onPress={handlePublish}
               disabled={!hasContent || isSubmitting}
@@ -835,7 +855,20 @@ const s = StyleSheet.create({
   headerRightSide: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+  },
+  articleModeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  articleModeBtnText: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
   },
   publishBtn: {
     backgroundColor: '#1D9BF0',

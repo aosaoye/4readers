@@ -164,6 +164,29 @@ export default function CreatorStudioScreen() {
             </Text>
           </View>
 
+          <Feather name="chevron-right" size={20} color="#71767B" />
+        </Pressable>
+
+        {/* 6. Editor de artículos (Rich Text TipTap) */}
+        <Pressable
+          onPress={() => router.push('/post/article')}
+          style={({ pressed }) => [s.itemRow, pressed && s.itemPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Editor de artículos"
+        >
+          <View style={s.iconWrap}>
+            <Feather name="edit-3" size={22} color="#FFFFFF" />
+          </View>
+
+          <View style={s.itemTextCol}>
+            <Text variant="heading" style={s.itemTitle} numberOfLines={1}>
+              Editor de artículos
+            </Text>
+            <Text style={s.itemSubtitle} numberOfLines={1}>
+              Historias y blogs con formato enriquecido
+            </Text>
+          </View>
+
           <View style={s.newBadgeWrap}>
             <Text style={s.newBadgeText}>Nuevo</Text>
           </View>
